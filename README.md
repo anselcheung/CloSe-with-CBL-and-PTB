@@ -56,8 +56,7 @@ The steps for downloading the dataset are described in [docs/dataset.md](docs/da
 
 ## CloSe-Net Clothing Segmentation Method
 
-The pretrained models can be downloaded from [this link](https://nextcloud.mpi-klsb.mpg.de/index.php/s/TN9LDrM9YxQoXfA) in the folder `CloSeNet/`.
-After downloading, place the models in the `./pretrained` folder.
+The pretrained checkpoint is available [here](https://github.com/anticdimi/CloSe/tree/main/pretrained).
 
 ### Inference
 
