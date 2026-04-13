@@ -52,7 +52,22 @@ If the environment setup fails, please follow instructions on how to install Pyt
 
 ## CloSe-D Dataset
 
-The steps for downloading the dataset are described in [docs/dataset.md](docs/dataset.md).
+The dataset is hosted on the Hugging Face Hub: [🤗 anticdimi/CloSe-D](https://huggingface.co/datasets/anticdimi/CloSe-D).
+
+Quick download via the CLI:
+
+```bash
+huggingface-cli download anticdimi/CloSe-D --repo-type dataset --local-dir ./data
+```
+
+Or programmatically:
+
+```python
+from huggingface_hub import snapshot_download
+path = snapshot_download(repo_id='anticdimi/CloSe-D', repo_type='dataset')
+```
+
+For file formats, label mapping, subset licensing (CloSe-Di / CloSe-Dc / CloSe-D++), and instructions on obtaining the commercial scans (Renderpeople, Twindom, AXYZ), see [docs/dataset.md](docs/dataset.md).
 
 ## CloSe-Net Clothing Segmentation Method
 

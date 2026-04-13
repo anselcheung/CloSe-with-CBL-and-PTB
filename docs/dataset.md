@@ -1,12 +1,17 @@
 # CloSe-D Dataset
 
-The dataset is available for download [here](https://nextcloud.mpi-klsb.mpg.de/index.php/s/HSWYzTreszKqf5Y).
+The dataset is hosted on the Hugging Face Hub: [🤗 anticdimi/CloSe-D](https://huggingface.co/datasets/anticdimi/CloSe-D).
+
+```bash
+huggingface-cli download anticdimi/CloSe-D --repo-type dataset --local-dir ./data
+```
 
 As described in the paper, we release the following:
 
-1. ***CloSe-Di***: We provide 1455 scans, segmentation labels, and SMPL registrations.
-2. ***CloSe-Dc***: Due to licensing concerns, we release segmentation labels, SMPL registrations, and instructions for purchasing commercial 1732 scans. See below for more details.
-3. ***CloSe-D++***: consisting of a subset of publicly available datasets ([THuman2-0](https://github.com/ytrock/THuman2.0-Dataset), [HuMMan](https://caizhongang.com/projects/HuMMan/), [3DHumans](https://cvit.iiit.ac.in/research/projects/cvit-projects/3dhumans)), we release the segmentation labels for ~1000 scans. For scans and their SMPL registrations please refer to original work.
+1. ***CloSe-Di*** (`CloSe-Di/`): We provide 1455 scans, segmentation labels, and SMPL registrations. One `.npz` per scan.
+2. ***CloSe-Dc*** (`CloSe-Dc/`): Due to licensing concerns, we release segmentation labels, SMPL registrations, and instructions for purchasing commercial 1732 scans. See below for more details. One `.npz` per scan.
+3. ***CloSe-D++*** (`CloSe-D++/`): consisting of a subset of publicly available datasets ([THuman2-0](https://github.com/ytrock/THuman2.0-Dataset), [HuMMan](https://caizhongang.com/projects/HuMMan/), [3DHumans](https://cvit.iiit.ac.in/research/projects/cvit-projects/3dhumans)), we release the segmentation labels for ~1000 scans. For scans and their SMPL registrations please refer to original work.
+4. ***CloSe-D++_updated*** (`CloSe-D++_updated/`): a refined/expanded set of THuman2.0 labels released after the paper (`THuman2.0_labels.npz`). Use this in place of the original `CloSe-D++` THuman2 labels for the latest version.
 
 ### Dataset details
 
@@ -52,6 +57,8 @@ The segmentation labels in our dataset are ordered as follows:
  17: 'Jacket'
 ```
 
+Note that the per-scan fields above apply to ***CloSe-Di*** and ***CloSe-Dc***. For ***CloSe-D++*** and ***CloSe-D++_updated***, only segmentation labels (and related metadata) are provided — the scan geometry must be obtained from the original datasets ([THuman2.0](https://github.com/ytrock/THuman2.0-Dataset), [HuMMan](https://caizhongang.com/projects/HuMMan/), [3DHumans](https://cvit.iiit.ac.in/research/projects/cvit-projects/3dhumans)).
+
 #### Note
 See the [prep_scan.py](../prep_scan.py) script to see how the data is prepared for inference.
 
@@ -67,7 +74,7 @@ CloSe-Dc constitues of scans from commercial sources. So we cannot release the s
 
 To run your training and evaluation experiments on the provided datasets or on your custom datasets, you need to keep a file which specifies the data partition you would like to use. 
 
-An example split file for CloSe-Di, that should reside in `/data/split_closedi.npz`,  is provided in [the link](https://nextcloud.mpi-klsb.mpg.de/index.php/s/HSWYzTreszKqf5Y).
+A split file specifying your data partition (e.g. `split_closedi.npz`) should reside at `/data/split_closedi.npz`. You can construct one from the scan filenames in `CloSe-Di/`.
 
 ## Disclaimer
 
