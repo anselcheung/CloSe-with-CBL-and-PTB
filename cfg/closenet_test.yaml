@@ -1,7 +1,7 @@
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train
+exp_logs_path: ./closenet_test
 optim:
   name: adam
   lr: 5.0e-3

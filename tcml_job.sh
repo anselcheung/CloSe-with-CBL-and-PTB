@@ -7,7 +7,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+#SBATCH --partition=day
+#SBATCH --time=04:00:00
 
 # --- GPU ---
 # Standard nodes: 4x GTX 1080Ti (11GB) or 8x RTX 2080Ti (11GB)
