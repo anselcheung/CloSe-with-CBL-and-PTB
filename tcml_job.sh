@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=close_train
+#SBATCH --job-name=close_test
 #SBATCH --output=logs/%j_out.txt
 #SBATCH --error=logs/%j_err.txt
 
@@ -36,10 +36,6 @@ source ~/.bashrc
 conda activate close
 
 # --- Your command ---
-python train.py \
-    --data_root /path/to/CloSeD \
-    --output_dir /path/to/output \
-    --batch_size 16 \
-    --epochs 100
+python test_closenet.py cfg/closenet_test.yaml pretrained/closenet.pth
 
 echo "End: $(date)"
