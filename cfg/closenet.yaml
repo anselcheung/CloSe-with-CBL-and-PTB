@@ -56,6 +56,12 @@ training:
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
+    cbl_loss: 0.1
+  cbl:
+    enabled: true
+    k: 40
+    radius: 0.1
+    temperature: 1.0
   max_epochs: 200
   max_iters: -1
   print_it: 200

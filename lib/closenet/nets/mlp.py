@@ -23,7 +23,11 @@ class MLPDecoder(nn.Module):
                 )
             )
 
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_features: bool = False, **kwargs) -> torch.Tensor:
+        features = x
         for layer in self.layers:
+            features = x
             x = layer(x)
+        if return_features:
+            return x, features
         return x

@@ -2,7 +2,7 @@ from collections import defaultdict
 
 import torch
 
-from lib.utils.metrics import cross_entropy, labels_from_logits
+from lib.utils.metrics import boundary_iou, contrastive_boundary_loss, cross_entropy, labels_from_logits
 from lib.utils.types import EasierDict
 from lib.closenet.trainers.base_trainer import BaseTrainer
 from typing import Any
@@ -29,6 +29,7 @@ class CloSeNetTrainer(BaseTrainer):
         )
 
         self.training_cfg = cfg.training
+        self.cbl_cfg = cfg.training.get('cbl', EasierDict(enabled=False))
 
         def _optim_params(x) -> dict[str, Any]:
             return {
@@ -88,9 +89,34 @@ class CloSeNetTrainer(BaseTrainer):
         loss_dict = defaultdict()
         if not skip_loss:
             loss_dict['segm_loss'] = cross_entropy(outp_dict['logits'], batch.y, smoothing=False)
+            if self.cbl_cfg.get('enabled', False):
+                loss_dict['cbl_loss'] = contrastive_boundary_loss(
+                    outp_dict['decoder_features'],
+                    batch.points,
+                    batch.y,
+                    k=self.cbl_cfg.get('k', 40),
+                    radius=self.cbl_cfg.get('radius', 0.1),
+                    temperature=self.cbl_cfg.get('temperature', 1.0),
+                )
 
             loss_dict['total_loss'] = sum(
-                [self.loss_weights[k] * loss_dict[k] for k in self.loss_weights.keys()]
+                [
+                    self.loss_weights[k] * loss_dict[k]
+                    for k in self.loss_weights.keys()
+                    if k in loss_dict
+                ]
             )
+
+            if self.cbl_cfg.get('enabled', False) and not self.model.training:
+                loss_dict['boundary_iou'] = torch.tensor(
+                    boundary_iou(
+                        batch.points,
+                        labels_from_logits(outp_dict['logits']),
+                        batch.y,
+                        k=self.cbl_cfg.get('k', 40),
+                        radius=self.cbl_cfg.get('radius', 0.1),
+                    ),
+                    device=self.device,
+                )
 
         return loss_dict, self._pack_data(batch, outp_dict)

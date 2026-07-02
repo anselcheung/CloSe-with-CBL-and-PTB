@@ -58,20 +58,23 @@ class CloSeNet(torch.nn.Module):
             attn_weights=attn_weights,
         )
 
-    def _decode(self, data: EasierDict, **kwargs) -> torch.Tensor:
+    def _decode(self, data: EasierDict, **kwargs) -> EasierDict:
         encodings = (
             torch.cat([data.pc_features, data.part_features, data.garm_features], dim=-1)
             .permute(0, 2, 1)
             .contiguous()
         )
-        return self.segm_dec(encodings, **kwargs)
+        logits, decoder_features = self.segm_dec(encodings, return_features=True, **kwargs)
+        return EasierDict(logits=logits, decoder_features=decoder_features)
 
     def forward(self, data: EasierDict, **kwargs) -> EasierDict:
         encodings = self._encode(data, **kwargs)
-        logits = self._decode(encodings, **kwargs)
+        decoded = self._decode(encodings, **kwargs)
+        logits = decoded.logits
         return EasierDict(
             **data,
             logits=logits,
             labels=F.softmax(logits, dim=1).argmax(dim=1),
             encodings=encodings,
+            decoder_features=decoded.decoder_features,
         )
