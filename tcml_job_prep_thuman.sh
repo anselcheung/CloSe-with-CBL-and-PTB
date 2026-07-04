@@ -44,6 +44,30 @@ conda activate close
 # --- i.e. the parent of a "smpl/" folder containing SMPL_NEUTRAL.pkl etc. ---
 BM_DIR_PATH=/home/stud101/models/
 
+# --- TEMP DIAGNOSTIC: confirm what this job actually sees at BM_DIR_PATH ---
+# smplx.create() silently falls back to guessing the model type from the
+# basename when os.path.isdir(model_path) is False, which is why we saw
+# "Unknown model type models"/"Unknown model type , exiting!" instead of a
+# clear file-not-found error. This checks, from inside the job itself (same
+# node/env/user context), whether the path is actually visible as a directory.
+python3 -c "
+import os
+p = '$BM_DIR_PATH'
+print('repr(BM_DIR_PATH):', repr(p))
+print('os.path.isdir:', os.path.isdir(p))
+print('os.path.exists:', os.path.exists(p))
+try:
+    print('os.listdir:', os.listdir(p))
+except Exception as e:
+    print('os.listdir failed:', repr(e))
+smpl_sub = os.path.join(p, 'smpl')
+print('smpl subfolder isdir:', os.path.isdir(smpl_sub))
+try:
+    print('smpl subfolder listdir:', os.listdir(smpl_sub))
+except Exception as e:
+    print('smpl subfolder listdir failed:', repr(e))
+"
+
 # --- Your command ---
 # Runs both stages: preprocess all labeled THuman2.0 scans into
 # data/THuman2.0_preprocessed/, then fold them into cfg/data_split_thuman.json
