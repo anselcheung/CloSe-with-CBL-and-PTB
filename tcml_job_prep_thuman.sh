@@ -33,7 +33,11 @@ echo "Start: $(date)"
 
 # Activate your environment
 # Option A: conda
-source ~/.bashrc
+# Note: sourcing ~/.bashrc + `conda activate` alone can print
+# "run conda init before conda activate" in non-interactive SLURM shells,
+# because .bashrc's early-return-if-non-interactive guard skips past the
+# conda init block. Calling the shell hook directly avoids that.
+eval "$(conda shell.bash hook)"
 conda activate close
 
 # --- Fill this in: path to the SMPL (not SMPL-X) body model directory, ---
