@@ -9,7 +9,7 @@ optim:
   gamma: 0.1
   weight_decay: 0.0
 data:
-  split_file: ./cfg/data_split.json
+  split_file: ./cfg/data_split_thuman.json
   data_path: ./data
   n_classes: 18
   pointcloud_samples: 2048
