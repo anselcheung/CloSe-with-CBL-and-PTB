@@ -42,7 +42,7 @@ conda activate close
 
 # --- Fill this in: path to the SMPL (not SMPL-X) body model directory, ---
 # --- i.e. the parent of a "smpl/" folder containing SMPL_NEUTRAL.pkl etc. ---
-BM_DIR_PATH=/home/stud101/models/smpl/models
+BM_DIR_PATH=/home/stud101/models/
 
 # --- Your command ---
 # Runs both stages: preprocess all labeled THuman2.0 scans into
