@@ -38,6 +38,27 @@ class CloSeNet(torch.nn.Module):
             slope=segm_dec_cfg.slope,
         )
 
+        # * Optional PTB auxiliary heads (Phase 1). Gated by config so the baseline
+        # * architecture and pretrained checkpoints are unaffected when disabled.
+        aux_cfg = model_cfg.get('aux_heads', None)
+        self.use_aux_heads = bool(aux_cfg is not None and aux_cfg.get('enabled', False))
+        if self.use_aux_heads:
+            boundary_channels = aux_cfg.get('boundary_channels', [256, 128])
+            direction_channels = aux_cfg.get('direction_channels', [256, 128])
+            self.boundary_head = MLPDecoder(
+                channels=[segm_input] + list(boundary_channels) + [2],
+                dropout=segm_dec_cfg.dropout,
+                slope=segm_dec_cfg.slope,
+            )
+            self.direction_head = MLPDecoder(
+                channels=[segm_input] + list(direction_channels) + [3],
+                dropout=segm_dec_cfg.dropout,
+                slope=segm_dec_cfg.slope,
+            )
+        else:
+            self.boundary_head = None
+            self.direction_head = None
+
     def _encode(self, data: EasierDict, **kwargs) -> EasierDict:
         x_max, conv_out, data = self.pc_enc(data, **kwargs)
         # * Get per-point features
@@ -58,20 +79,33 @@ class CloSeNet(torch.nn.Module):
             attn_weights=attn_weights,
         )
 
-    def _decode(self, data: EasierDict, **kwargs) -> torch.Tensor:
-        encodings = (
+    def _decode(self, data: EasierDict, **kwargs) -> EasierDict:
+        # * (B, segm_input, N) per-point features shared by every head.
+        feat = (
             torch.cat([data.pc_features, data.part_features, data.garm_features], dim=-1)
             .permute(0, 2, 1)
             .contiguous()
         )
-        return self.segm_dec(encodings, **kwargs)
+        out = EasierDict(logits=self.segm_dec(feat, **kwargs))
+        if self.use_aux_heads:
+            out.boundary_logits = self.boundary_head(feat, **kwargs)  # (B, 2, N)
+            # * Unit-normalise the regressed directions along the channel axis.
+            out.pred_dirs = F.normalize(
+                self.direction_head(feat, **kwargs), dim=1, eps=1e-8
+            )  # (B, 3, N)
+        return out
 
     def forward(self, data: EasierDict, **kwargs) -> EasierDict:
         encodings = self._encode(data, **kwargs)
-        logits = self._decode(encodings, **kwargs)
-        return EasierDict(
+        decoded = self._decode(encodings, **kwargs)
+        logits = decoded.logits
+        out = EasierDict(
             **data,
             logits=logits,
             labels=F.softmax(logits, dim=1).argmax(dim=1),
             encodings=encodings,
         )
+        if self.use_aux_heads:
+            out.boundary_logits = decoded.boundary_logits
+            out.pred_dirs = decoded.pred_dirs
+        return out
