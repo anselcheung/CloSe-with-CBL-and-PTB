@@ -42,31 +42,7 @@ conda activate close
 
 # --- Fill this in: path to the SMPL (not SMPL-X) body model directory, ---
 # --- i.e. the parent of a "smpl/" folder containing SMPL_NEUTRAL.pkl etc. ---
-BM_DIR_PATH=/home/stud101/models/
-
-# --- TEMP DIAGNOSTIC: confirm what this job actually sees at BM_DIR_PATH ---
-# smplx.create() silently falls back to guessing the model type from the
-# basename when os.path.isdir(model_path) is False, which is why we saw
-# "Unknown model type models"/"Unknown model type , exiting!" instead of a
-# clear file-not-found error. This checks, from inside the job itself (same
-# node/env/user context), whether the path is actually visible as a directory.
-python3 -c "
-import os
-p = '$BM_DIR_PATH'
-print('repr(BM_DIR_PATH):', repr(p))
-print('os.path.isdir:', os.path.isdir(p))
-print('os.path.exists:', os.path.exists(p))
-try:
-    print('os.listdir:', os.listdir(p))
-except Exception as e:
-    print('os.listdir failed:', repr(e))
-smpl_sub = os.path.join(p, 'smpl')
-print('smpl subfolder isdir:', os.path.isdir(smpl_sub))
-try:
-    print('smpl subfolder listdir:', os.listdir(smpl_sub))
-except Exception as e:
-    print('smpl subfolder listdir failed:', repr(e))
-"
+BM_DIR_PATH=/home/stud101/CloSe-with-CBL-and-PTB/models
 
 # --- Your command ---
 # Runs both stages: preprocess all labeled THuman2.0 scans into
@@ -84,12 +60,12 @@ except Exception as e:
 # python prep_thuman.py --bm_dir_path "$BM_DIR_PATH" --scan_ids 0000 --stage prep --overwrite
 #
 # 2) Small batch trial (first 20 scans found in data/THuman2.0_Release_copy/):
-python prep_thuman.py --bm_dir_path "$BM_DIR_PATH" --limit 20 --stage prep --overwrite
+# python prep_thuman.py --bm_dir_path "$BM_DIR_PATH" --limit 20 --stage split
 #
 # Both write into the same data/THuman2.0_preprocessed/ output dir and log file
 # as the full run, so inspect prep_thuman_log.txt afterwards, then re-run with
 # --stage all (no --scan_ids/--limit) once you're satisfied it works.
 
-# python prep_thuman.py --bm_dir_path "$BM_DIR_PATH" --stage all
+python prep_thuman.py --bm_dir_path "$BM_DIR_PATH" --stage all
 
 echo "End: $(date)"
