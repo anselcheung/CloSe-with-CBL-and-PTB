@@ -2,7 +2,13 @@ from collections import defaultdict
 
 import torch
 
-from lib.utils.metrics import boundary_iou, contrastive_boundary_loss, cross_entropy, labels_from_logits
+from lib.utils.metrics import (
+    boundary_iou,
+    contrastive_boundary_loss,
+    cross_entropy,
+    labels_from_logits,
+    select_cbl_features,
+)
 from lib.utils.types import EasierDict
 from lib.closenet.trainers.base_trainer import BaseTrainer
 from typing import Any
@@ -90,13 +96,23 @@ class CloSeNetTrainer(BaseTrainer):
         if not skip_loss:
             loss_dict['segm_loss'] = cross_entropy(outp_dict['logits'], batch.y, smoothing=False)
             if self.cbl_cfg.get('enabled', False):
-                loss_dict['cbl_loss'] = contrastive_boundary_loss(
-                    outp_dict['decoder_features'],
-                    batch.points,
-                    batch.y,
-                    k=self.cbl_cfg.get('k', 40),
-                    radius=self.cbl_cfg.get('radius', 0.1),
-                    temperature=self.cbl_cfg.get('temperature', 1.0),
+                # select_cbl_features returns 1 tensor (decoder / encoder_stage3) or 3
+                # (encoder_all_stages); summing the per-tensor losses matches the
+                # paper's multi-scale form (Eq. 7): L = L_segm + weight * sum_n(L_CBL^n).
+                loss_dict['cbl_loss'] = sum(
+                    contrastive_boundary_loss(
+                        feat,
+                        batch.points,
+                        batch.y,
+                        k=self.cbl_cfg.get('k', 40),
+                        radius=self.cbl_cfg.get('radius', 0.1),
+                        temperature=self.cbl_cfg.get('temperature', 1.0),
+                    )
+                    for feat in select_cbl_features(
+                        self.cbl_cfg.get('feature_source', 'decoder'),
+                        outp_dict,
+                        emb_dim=self.model.pc_enc.emb_dim,
+                    )
                 )
 
             loss_dict['total_loss'] = sum(
@@ -107,6 +123,8 @@ class CloSeNetTrainer(BaseTrainer):
                 ]
             )
 
+            # boundary_iou is a metric, not a training loss - only computed at
+            # validation/test time (self.model.training is False there).
             if self.cbl_cfg.get('enabled', False) and not self.model.training:
                 loss_dict['boundary_iou'] = torch.tensor(
                     boundary_iou(

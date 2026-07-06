@@ -3,6 +3,22 @@ out/
 outputs*
 data/
 
+# Training runs: checkpoints, tensorboard summaries (see summary/ above), debug logs.
+closenet_train*/
+
+# Slurm job stdout/stderr and evaluation result JSONs - regenerate by re-running the
+# corresponding .sbatch script, not meant to be committed.
+logs/
+results/
+
+# Trained checkpoints copied out by train_cbl_sweep.sbatch / train_base.sbatch.
+# closenet_cfg.yaml / closenet.pth (the original pretrained release) are the only
+# pretrained/ files that are actually tracked.
+pretrained/*.pt
+
+# Reference paper PDFs downloaded locally for reading, not part of the codebase.
+*.pdf
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

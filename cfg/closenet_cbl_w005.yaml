@@ -1,7 +1,7 @@
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train_base
+exp_logs_path: ./closenet_train_cbl_w005
 optim:
   name: adam
   lr: 5.0e-3
@@ -15,7 +15,7 @@ data:
   pointcloud_samples: 2048
   num_workers: 0
   batch_size: 4
-  input: 
+  input:
     - points
     - colors
     - normals
@@ -56,15 +56,15 @@ training:
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
-    cbl_loss: 0.1
+    cbl_loss: 0.05
   cbl:
-    enabled: false
+    enabled: true
     k: 40
     radius: 0.1
     temperature: 1.0
   max_epochs: 30
   max_iters: -1
   print_it: 200
-  selection_metric: mIoU,freq_IoU
+  selection_metric: mIoU,freq_IoU,boundary_iou
   selection_mode: maximize
   val_it: 200
