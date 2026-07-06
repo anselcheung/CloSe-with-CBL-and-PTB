@@ -13,13 +13,36 @@ import sys
 from typing import Union
 
 
-def load_model(file_path: str, device: str = 'cuda') -> nn.Module:
-    model_cfg = EasierDict(
-        yaml.load(open(file_path.replace('.pth', '_cfg.yaml'), 'r'), Loader=yaml.FullLoader)
-    )
+def load_model(file_path: str, device: str = 'cuda', cfg: EasierDict = None) -> nn.Module:
+    """Load a CloSeNet checkpoint.
+
+    Handles both raw state_dicts (e.g. the shipped ``closenet.pth`` paired with
+    ``closenet_cfg.yaml``) and CheckpointIO-wrapped training checkpoints (``.pt``),
+    which embed both the model state_dict and its config. The architecture config is
+    resolved as: explicit ``cfg`` arg > config embedded in the checkpoint > paired
+    ``<name>_cfg.yaml``. This lets a PTB-trained checkpoint reconstruct its auxiliary
+    heads without a separate config file.
+    """
+    state = torch.load(file_path, map_location=device)
+
+    model_state, embedded_cfg = state, None
+    if isinstance(state, dict) and any(str(k).endswith('_model') for k in state):
+        model_state = next(state[k] for k in state if str(k).endswith('_model'))
+        embedded_cfg = next((state[k] for k in state if str(k).endswith('_config')), None)
+
+    if cfg is not None and cfg.get('model_arch', None) is not None:
+        model_cfg = cfg
+    elif embedded_cfg is not None:
+        model_cfg = EasierDict(embedded_cfg)
+    else:
+        model_cfg = EasierDict(
+            yaml.load(
+                open(file_path.replace('.pth', '_cfg.yaml'), 'r'), Loader=yaml.FullLoader
+            )
+        )
 
     model = CloSeNet(model_cfg)
-    model.load_state_dict(torch.load(file_path, map_location=device))
+    model.load_state_dict(model_state)
     return model.to(device)
 
 

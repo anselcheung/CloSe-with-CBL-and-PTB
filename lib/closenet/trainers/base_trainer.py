@@ -12,7 +12,7 @@ from torch_geometric.data.batch import Batch
 from tqdm import tqdm
 
 from lib.utils.config import CheckpointIO, Logger
-from lib.utils.metrics import IoU, frequency_weighted_IoU
+from lib.utils.metrics import IoU, boundary_region_mIoU, frequency_weighted_IoU
 from lib.utils.misc import format_time, mkdir
 from lib.utils.types import EasierDict
 
@@ -257,5 +257,20 @@ class BaseTrainer(object):
         val_dict['freq_IoU'] = frequency_weighted_IoU(
             labels, tgts, num_classes=self.cfg.data.n_classes
         )
+
+        # * Boundary-region mIoU at configured radii, when GT boundary distances are
+        # * available (i.e. scans were processed by prep_boundaries.py).
+        if 'boundary_dist' in outp_dict:
+            bdist = outp_dict['boundary_dist'].squeeze()
+            eval_cfg = self.cfg.get('eval', None)
+            radii = (
+                eval_cfg.get('boundary_radii', [0.0056, 0.014])
+                if eval_cfg is not None
+                else [0.0056, 0.014]
+            )
+            for rho in radii:
+                val_dict[f'boundary_mIoU@{rho}'] = boundary_region_mIoU(
+                    labels, tgts, bdist, rho, num_classes=self.cfg.data.n_classes
+                )
 
         return val_dict, outp_dict

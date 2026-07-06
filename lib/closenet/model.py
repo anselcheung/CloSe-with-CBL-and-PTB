@@ -38,6 +38,27 @@ class CloSeNet(torch.nn.Module):
             slope=segm_dec_cfg.slope,
         )
 
+        # * Optional PTB auxiliary heads (Phase 1). Gated by config so the baseline
+        # * architecture and pretrained checkpoints are unaffected when disabled.
+        aux_cfg = model_cfg.get('aux_heads', None)
+        self.use_aux_heads = bool(aux_cfg is not None and aux_cfg.get('enabled', False))
+        if self.use_aux_heads:
+            boundary_channels = aux_cfg.get('boundary_channels', [256, 128])
+            direction_channels = aux_cfg.get('direction_channels', [256, 128])
+            self.boundary_head = MLPDecoder(
+                channels=[segm_input] + list(boundary_channels) + [2],
+                dropout=segm_dec_cfg.dropout,
+                slope=segm_dec_cfg.slope,
+            )
+            self.direction_head = MLPDecoder(
+                channels=[segm_input] + list(direction_channels) + [3],
+                dropout=segm_dec_cfg.dropout,
+                slope=segm_dec_cfg.slope,
+            )
+        else:
+            self.boundary_head = None
+            self.direction_head = None
+
     def _encode(self, data: EasierDict, **kwargs) -> EasierDict:
         x_max, conv_out, data = self.pc_enc(data, **kwargs)
         # * Get per-point features
@@ -78,3 +99,7 @@ class CloSeNet(torch.nn.Module):
             encodings=encodings,
             decoder_features=decoded.decoder_features,
         )
+        if self.use_aux_heads:
+            out.boundary_logits = decoded.boundary_logits
+            out.pred_dirs = decoded.pred_dirs
+        return out

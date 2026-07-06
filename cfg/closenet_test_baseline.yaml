@@ -1,7 +1,11 @@
+# Eval mode 1 — baseline CloSeNet (no auxiliary heads, no post-processing).
+#   python test_closenet.py cfg/closenet_test_baseline.yaml pretrained/closenet.pth
+# NOTE: point exp_logs_path at a fresh/empty dir so the trainer does not auto-load a
+# stray checkpoint over the weights you pass in.
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train_base
+exp_logs_path: ./closenet_test_baseline
 optim:
   name: adam
   lr: 5.0e-3
@@ -9,13 +13,13 @@ optim:
   gamma: 0.1
   weight_decay: 0.0
 data:
-  split_file: ./cfg/data_split_thuman.json
+  split_file: ./cfg/data_split.json
   data_path: ./data
   n_classes: 18
   pointcloud_samples: 2048
   num_workers: 0
   batch_size: 4
-  input: 
+  input:
     - points
     - colors
     - normals
@@ -56,15 +60,15 @@ training:
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
-    cbl_loss: 0.1
-  cbl:
-    enabled: false
-    k: 40
-    radius: 0.1
-    temperature: 1.0
-  max_epochs: 30
+  max_epochs: 200
   max_iters: -1
   print_it: 200
   selection_metric: mIoU,freq_IoU
   selection_mode: maximize
   val_it: 200
+# Boundary-region mIoU is still reported when the eval scans carry boundary_dist
+# (prep_boundaries.py), giving a baseline number to compare the PTB modes against.
+eval:
+  boundary_radii: [0.0056, 0.014]
+post_processing:
+  enabled: false

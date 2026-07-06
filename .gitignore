@@ -2,6 +2,8 @@ summary/
 out/
 outputs*
 data/
+logs/
+models/
 
 # Training runs: checkpoints, tensorboard summaries (see summary/ above), debug logs.
 closenet_train*/

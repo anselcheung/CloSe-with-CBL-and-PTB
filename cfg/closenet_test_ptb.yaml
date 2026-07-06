@@ -1,7 +1,12 @@
+# Eval mode 2 — CloSeNet + PTB (auxiliary heads active, no post-processing).
+#   python test_closenet.py cfg/closenet_test_ptb.yaml <ptb_checkpoint>.pt
+# The architecture (incl. aux heads) is reconstructed from the checkpoint's embedded
+# config; the aux_heads block below is documentation and a fallback. Reports mIoU,
+# freq_IoU and boundary_mIoU@rho.
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train_base
+exp_logs_path: ./closenet_test_ptb
 optim:
   name: adam
   lr: 5.0e-3
@@ -9,13 +14,13 @@ optim:
   gamma: 0.1
   weight_decay: 0.0
 data:
-  split_file: ./cfg/data_split_thuman.json
+  split_file: ./cfg/data_split.json
   data_path: ./data
   n_classes: 18
   pointcloud_samples: 2048
   num_workers: 0
   batch_size: 4
-  input: 
+  input:
     - points
     - colors
     - normals
@@ -51,20 +56,26 @@ model_arch:
     name: mlp
     segm_input: 1283
     slope: 0.2
+  aux_heads:
+    enabled: true
+    boundary_channels: [256, 128]
+    direction_channels: [256, 128]
 training:
   batch_size: 16
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
-    cbl_loss: 0.1
-  cbl:
-    enabled: false
-    k: 40
-    radius: 0.1
-    temperature: 1.0
-  max_epochs: 30
+    boundary_loss: 3.0
+    direction_loss: 0.3
+  boundary_beta: 0.6
+  dir_mask_dist: null
+  max_epochs: 200
   max_iters: -1
   print_it: 200
   selection_metric: mIoU,freq_IoU
   selection_mode: maximize
   val_it: 200
+eval:
+  boundary_radii: [0.0056, 0.014]
+post_processing:
+  enabled: false

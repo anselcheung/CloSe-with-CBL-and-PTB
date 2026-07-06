@@ -1,7 +1,7 @@
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train_base
+exp_logs_path: ./closenet_test
 optim:
   name: adam
   lr: 5.0e-3
@@ -9,7 +9,7 @@ optim:
   gamma: 0.1
   weight_decay: 0.0
 data:
-  split_file: ./cfg/data_split_thuman.json
+  split_file: ./cfg/data_split.json
   data_path: ./data
   n_classes: 18
   pointcloud_samples: 2048
@@ -56,13 +56,7 @@ training:
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
-    cbl_loss: 0.1
-  cbl:
-    enabled: false
-    k: 40
-    radius: 0.1
-    temperature: 1.0
-  max_epochs: 30
+  max_epochs: 200
   max_iters: -1
   print_it: 200
   selection_metric: mIoU,freq_IoU

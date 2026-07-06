@@ -1,7 +1,11 @@
+# CloSeNet + PTB (Phase 1): baseline architecture plus the auxiliary boundary and
+# direction heads, trained with the extra weighted losses. Requires scans processed
+# by prep_boundaries.py (boundary/direction/boundary_dist fields).
+#   python train_closenet.py cfg/closenet_ptb.yaml
 model: closenet
 device: cuda
 debug: True
-exp_logs_path: ./closenet_train_base
+exp_logs_path: ./closenet_ptb_train
 optim:
   name: adam
   lr: 5.0e-3
@@ -15,7 +19,7 @@ data:
   pointcloud_samples: 2048
   num_workers: 0
   batch_size: 4
-  input: 
+  input:
     - points
     - colors
     - normals
@@ -51,20 +55,25 @@ model_arch:
     name: mlp
     segm_input: 1283
     slope: 0.2
+  # PTB auxiliary heads (Phase 1). Set enabled: false for the baseline.
+  aux_heads:
+    enabled: true
+    boundary_channels: [256, 128]
+    direction_channels: [256, 128]
 training:
   batch_size: 16
   backup_it: -1
   loss_weights:
     segm_loss: 1.0
-    cbl_loss: 0.1
-  cbl:
-    enabled: false
-    k: 40
-    radius: 0.1
-    temperature: 1.0
-  max_epochs: 30
+    boundary_loss: 3.0
+    direction_loss: 0.3
+  boundary_beta: 0.6      # up-weight of the (scarce) boundary class in boundary CE
+  dir_mask_dist: null     # optional: drop direction loss for points closer than this to a boundary
+  max_epochs: 200
   max_iters: -1
   print_it: 200
   selection_metric: mIoU,freq_IoU
   selection_mode: maximize
   val_it: 200
+eval:
+  boundary_radii: [0.0056, 0.014]   # ~1cm / 2.5cm on a ~1.8m human in a unit bbox

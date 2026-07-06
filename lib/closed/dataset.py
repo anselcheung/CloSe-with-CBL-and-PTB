@@ -33,12 +33,30 @@ def load_scan_npz(
     garments = scan_data['garments'].astype(np.int32)
     canon_pose_coords = scan_data['canon_pose'].astype(np.float32)
 
+    # * Optional boundary-aware GT (precomputed by prep_boundaries.py). Absent for
+    # * legacy scans, in which case the boundary heads/losses are simply not used.
+    boundary = scan_data['boundary'].astype(np.int64) if 'boundary' in scan_data.keys() else None
+    direction = (
+        scan_data['direction'].astype(np.float32) if 'direction' in scan_data.keys() else None
+    )
+    boundary_dist = (
+        scan_data['boundary_dist'].astype(np.float32)
+        if 'boundary_dist' in scan_data.keys()
+        else None
+    )
+
     # * Filter out background points; eg. when training the model
     if filter_bg:
         non_bg_points = labels != -1
         labels = labels[non_bg_points]
         canon_pose_coords = canon_pose_coords[non_bg_points]
         scalar_features = scalar_features[non_bg_points]
+        if boundary is not None:
+            boundary = boundary[non_bg_points]
+        if direction is not None:
+            direction = direction[non_bg_points]
+        if boundary_dist is not None:
+            boundary_dist = boundary_dist[non_bg_points]
 
     if np.max(garments) > 1:
         raise ValueError('Garment labels should be in [0, 1] range')
@@ -53,6 +71,9 @@ def load_scan_npz(
         betas=betas,
         trans=trans,
         faces=faces,
+        boundary=boundary,
+        direction=direction,
+        boundary_dist=boundary_dist,
     )
 
 
@@ -162,7 +183,7 @@ class TorchCloSeDataset(TorchDataset):
         else:
             sample_idxs = np.random.choice(indices, size=self.pointcloud_samples)
 
-        return EasierDict(
+        item = EasierDict(
             points=sample['points'][sample_idxs],
             y=sample['y'][sample_idxs],
             garments=sample['garments'],
@@ -172,6 +193,14 @@ class TorchCloSeDataset(TorchDataset):
             betas=sample['betas'],
             trans=sample['trans'],
         )
+
+        # * Surface boundary-aware GT only when the scan carries it, so that the
+        # * default collate does not choke on ``None`` for legacy/baseline scans.
+        for key in ('boundary', 'direction', 'boundary_dist'):
+            if sample.get(key, None) is not None:
+                item[key] = sample[key][sample_idxs]
+
+        return item
 
     def __len__(self) -> int:
         return len(self.data_list)
