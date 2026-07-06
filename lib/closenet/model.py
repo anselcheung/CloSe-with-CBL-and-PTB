@@ -80,19 +80,26 @@ class CloSeNet(torch.nn.Module):
         )
 
     def _decode(self, data: EasierDict, **kwargs) -> EasierDict:
-        encodings = (
+        feat = (
             torch.cat([data.pc_features, data.part_features, data.garm_features], dim=-1)
             .permute(0, 2, 1)
             .contiguous()
         )
-        logits, decoder_features = self.segm_dec(encodings, return_features=True, **kwargs)
-        return EasierDict(logits=logits, decoder_features=decoder_features)
+        logits, decoder_features = self.segm_dec(feat, return_features=True, **kwargs)
+        out = EasierDict(logits=logits, decoder_features=decoder_features)
+        if self.use_aux_heads:
+            out.boundary_logits = self.boundary_head(feat, **kwargs)  # (B, 2, N)
+            # * Unit-normalise the regressed directions along the channel axis.
+            out.pred_dirs = F.normalize(
+                self.direction_head(feat, **kwargs), dim=1, eps=1e-8
+            )  # (B, 3, N)
+        return out
 
     def forward(self, data: EasierDict, **kwargs) -> EasierDict:
         encodings = self._encode(data, **kwargs)
         decoded = self._decode(encodings, **kwargs)
         logits = decoded.logits
-        return EasierDict(
+        out = EasierDict(
             **data,
             logits=logits,
             labels=F.softmax(logits, dim=1).argmax(dim=1),
