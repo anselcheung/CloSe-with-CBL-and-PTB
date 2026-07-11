@@ -45,13 +45,15 @@ conda activate close
 # ============================================================================
 
 # (1) Baseline CloSeNet — no aux heads, no post-processing:
-CONFIG="cfg/closenet_test_baseline.yaml";      CHECKPOINT="pretrained/closenet.pth"
+# CONFIG="cfg/closenet_test_baseline.yaml";      CHECKPOINT="pretrained/closenet.pth"
 
 # (2) CloSeNet + PTB — aux heads active, reports boundary_mIoU@rho:
-# CONFIG="cfg/closenet_test_ptb.yaml";           CHECKPOINT="<PATH_TO_PTB_CHECKPOINT>.pt"
+# CONFIG="cfg/closenet_test_ptb.yaml";           CHECKPOINT="closenet_ptb_train/checkpoints/valmin_169_65800_val=0.106_mIoU=0.921_freq_IoU=0.942.pt"
 
 # (3) CloSeNet + PTB + SegFix post-processing (needs the SAME PTB checkpoint):
-# CONFIG="cfg/closenet_test_ptb_postproc.yaml";  CHECKPOINT="<PATH_TO_PTB_CHECKPOINT>.pt"
+# CONFIG="cfg/closenet_test_ptb_postproc.yaml";  CHECKPOINT="closenet_ptb_train/checkpoints/valmin_169_65800_val=0.106_mIoU=0.921_freq_IoU=0.942.pt"
+
+CONFIG="cfg/closenet_test_ptb.yaml";           CHECKPOINT="closenet_ptb_cbl_train/checkpoints/valmin_108_42000_val=0.130_mIoU=0.916_freq_IoU=0.941_boundary_iou=0.793.pt"
 
 echo "Eval config:     $CONFIG"
 echo "Eval checkpoint: $CHECKPOINT"

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=close_train
+#SBATCH --job-name=close_ptb_train
 #SBATCH --output=logs/%j_out.txt
 #SBATCH --error=logs/%j_err.txt
 
@@ -45,8 +45,9 @@ conda activate close
 # IMPORTANT ARGUMENT — the training config selects the ablation/mode.
 # Uncomment exactly ONE assignment below (or point CONFIG at your own copy).
 # ============================================================================
-CONFIG="cfg/closenet.yaml"              # (1) baseline CloSeNet (segm loss only)
+# CONFIG="cfg/closenet.yaml"              # (1) baseline CloSeNet (segm loss only)
 # CONFIG="cfg/closenet_ptb.yaml"        # (2) CloSeNet + PTB aux heads (+boundary +direction)
+CONFIG="cfg/closenet_ptb_cbl.yaml"
 
 echo "Training config: $CONFIG"
 
