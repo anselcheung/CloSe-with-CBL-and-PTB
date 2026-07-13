@@ -1,8 +1,9 @@
 # Eval mode 2 — CloSeNet + PTB (auxiliary heads active, no post-processing).
-#   python test_closenet.py cfg/closenet_test_ptb.yaml <ptb_checkpoint>.pt
-# The architecture (incl. aux heads) is reconstructed from the checkpoint's embedded
-# config; the aux_heads block below is documentation and a fallback. Reports mIoU,
-# freq_IoU and boundary_mIoU@rho.
+#   python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb.yaml --ckpt <ptb_checkpoint>.pt
+# (or: sbatch evaluate_single.sbatch cfg/closenet_test_ptb.yaml <ptb_checkpoint>.pt)
+# The architecture (incl. aux heads) is built from model_arch.aux_heads below (must
+# match the checkpoint's training config). Reports mIoU, freq_IoU, boundary_iou,
+# mIoU@boundary, mIoU@inner, and boundary_mIoU@rho.
 model: closenet
 device: cuda
 debug: True

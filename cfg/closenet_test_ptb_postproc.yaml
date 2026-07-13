@@ -1,8 +1,10 @@
 # Eval mode 3 — CloSeNet + PTB with SegFix post-processing (Phase 3).
-#   python test_closenet.py cfg/closenet_test_ptb_postproc.yaml <ptb_checkpoint>.pt
+#   python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_postproc.yaml --ckpt <ptb_checkpoint>.pt
+# (or: sbatch evaluate_single.sbatch cfg/closenet_test_ptb_postproc.yaml <ptb_checkpoint>.pt)
 # Requires a PTB-trained checkpoint (boundary/direction heads). Post-processing walks
 # high-confidence boundary points along their predicted interior direction and copies
-# the nearest interior point's label, then reports mIoU / freq_IoU / boundary_mIoU@rho.
+# the nearest interior point's label, then reports mIoU / freq_IoU / boundary_iou /
+# mIoU@boundary / mIoU@inner / boundary_mIoU@rho.
 model: closenet
 device: cuda
 debug: True

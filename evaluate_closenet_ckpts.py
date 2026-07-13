@@ -1,30 +1,35 @@
 #!/usr/bin/env python3
-"""Evaluate a base (no-CBL) and a CBL CloSeNet checkpoint on the CloSe-Di test split.
+"""Evaluate CloSeNet checkpoints (baseline / PTB / CBL / PTB+CBL / PTB+postproc) on the
+CloSe-Di test split.
 
-Each model is loaded with its own training config (architecture is identical between
-the two; only the CBL loss/branch differs), run once over the test split, and scored
-with mIoU, per-class IoU, frequency-weighted IoU and boundary IoU. Results are written
-to a single JSON file for later comparison.
+Two modes, both routed through lib.factory + BaseTrainer.evaluate_model() so every
+ablation shares the exact same metric computation (mIoU, per-class IoU,
+frequency-weighted IoU, boundary_iou, mIoU@boundary, mIoU@inner, and boundary_mIoU@rho
+whenever the scans carry boundary_dist, i.e. prep_boundaries.py has been run):
+
+  Single-checkpoint mode (--config/--ckpt) - evaluate one checkpoint against one config,
+  e.g. a PTB checkpoint with SegFix post-processing enabled via a dedicated test config:
+      python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb.yaml \\
+          --ckpt closenet_ptb_train/checkpoints/<BEST>.pt
+
+  Paired mode (--base-config/--cbl-config, the default) - compare a no-CBL and a CBL
+  checkpoint side by side, auto-picking the best-mIoU checkpoint from each config's
+  exp_logs_path unless --base-ckpt/--cbl-ckpt are given:
+      python evaluate_closenet_ckpts.py --base-config cfg/closenet.yaml \\
+          --cbl-config cfg/closenet_cbl.yaml
+
+Results are written to a single JSON file for later comparison.
 """
 import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import torch
 import yaml
 
 from lib import factory
-from lib.utils.metrics import (
-    IoU,
-    boundary_iou,
-    contrastive_boundary_loss,
-    cross_entropy,
-    frequency_weighted_IoU,
-    labels_from_logits,
-    select_cbl_features,
-)
 from lib.utils.types import EasierDict
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -88,79 +93,54 @@ def load_checkpoint_weights(model: torch.nn.Module, ckpt_path: Path, device: str
 def evaluate_checkpoint(cfg: EasierDict, model: torch.nn.Module, ckpt_path: Path, device: torch.device) -> Dict[str, Any]:
     load_checkpoint_weights(model, ckpt_path, str(device))
     model.to(device)
-    model.eval()
 
     cbl_cfg = cfg.training.get('cbl', EasierDict(enabled=False))
     cbl_enabled = bool(cbl_cfg.get('enabled', False))
 
     test_dataset = factory.get_dataset(cfg, 'test')
-    test_loader = test_dataset.get_loader(shuffle=False)
+    trainer = factory.get_trainer(model, None, None, test_dataset, cfg)
 
-    segm_losses: List[float] = []
-    cbl_losses: List[float] = []
-    boundary_ious: List[float] = []
-    all_preds, all_tgts = [], []
+    # BaseTrainer.__init__ -> CheckpointIO._check_ckpts() auto-scans
+    # cfg.exp_logs_path/checkpoints and may silently overwrite our weights with the
+    # "latest by iteration" (not "best by mIoU") checkpoint it finds there. Re-load
+    # explicitly, after trainer construction, so the checkpoint we picked always wins,
+    # regardless of whether cfg.exp_logs_path is a real training dir (paired mode) or a
+    # fresh scratch dir (single-checkpoint mode).
+    load_checkpoint_weights(trainer.model, ckpt_path, str(device))
 
-    for batch in test_loader:
-        batch = batch.to(device)
-        outputs = model(batch)
-        logits = outputs['logits']
-        targets = batch.y
-        preds = labels_from_logits(logits)
-
-        segm_losses.append(float(cross_entropy(logits, targets, smoothing=False)))
-
-        if cbl_enabled:
-            cbl_loss = sum(
-                contrastive_boundary_loss(
-                    feat,
-                    batch.points,
-                    targets,
-                    k=cbl_cfg.get('k', 40),
-                    radius=cbl_cfg.get('radius', 0.1),
-                    temperature=cbl_cfg.get('temperature', 1.0),
-                )
-                for feat in select_cbl_features(
-                    cbl_cfg.get('feature_source', 'decoder'),
-                    outputs,
-                    emb_dim=model.pc_enc.emb_dim,
-                )
-            )
-            cbl_losses.append(float(cbl_loss))
-
-        boundary_ious.append(float(boundary_iou(
-            batch.points, preds, targets,
-            k=cbl_cfg.get('k', 40), radius=cbl_cfg.get('radius', 0.1),
-        )))
-
-        all_preds.append(preds.cpu())
-        all_tgts.append(targets.cpu())
-
-    preds_all = torch.cat(all_preds, dim=0)
-    tgts_all = torch.cat(all_tgts, dim=0)
-    per_class_iou, mean_iou = IoU(preds_all, tgts_all, num_classes=cfg.data.n_classes)
+    val_dict, outp_dict = trainer.evaluate_model(dataset='test', seed=42)
 
     metrics: Dict[str, Any] = {
         'checkpoint': str(ckpt_path),
         'num_test_samples': len(test_dataset),
-        'num_evaluated_shapes': int(preds_all.size(0)),
+        'num_evaluated_shapes': int(outp_dict['pred_labels'].shape[0]),
         'device': str(device),
         'cbl_enabled': cbl_enabled,
-        'segm_loss_mean': float(torch.tensor(segm_losses).mean()),
-        'mIoU': float(mean_iou),
-        'IoU_per_class': [float(x) for x in per_class_iou],
-        'freq_IoU': float(frequency_weighted_IoU(preds_all, tgts_all, num_classes=cfg.data.n_classes)),
-        'boundary_iou_mean': float(torch.tensor(boundary_ious).mean()),
+        'segm_loss_mean': float(val_dict['segm_loss']),
+        'mIoU': float(val_dict['mIoU']),
+        'IoU_per_class': [float(x) for x in val_dict['IoU']],
+        'freq_IoU': float(val_dict['freq_IoU']),
+        'boundary_iou_mean': float(val_dict['boundary_iou']),
+        'mIoU_boundary_mean': float(val_dict['mIoU_boundary']),
+        'mIoU_inner_mean': float(val_dict['mIoU_inner']),
     }
     if cbl_enabled:
-        metrics['cbl_loss_mean'] = float(torch.tensor(cbl_losses).mean()) if cbl_losses else float('nan')
+        metrics['cbl_loss_mean'] = float(val_dict.get('cbl_loss', float('nan')))
+    for key, value in val_dict.items():
+        if key.startswith('boundary_mIoU@'):
+            metrics[key] = float(value)
 
     return metrics
 
 
 def build_metric_summary(metrics: Dict[str, Any]) -> Dict[str, Any]:
-    keys = ['segm_loss_mean', 'mIoU', 'freq_IoU', 'boundary_iou_mean', 'cbl_loss_mean']
-    return {k: metrics[k] for k in keys if k in metrics}
+    keys = [
+        'segm_loss_mean', 'mIoU', 'freq_IoU', 'boundary_iou_mean',
+        'mIoU_boundary_mean', 'mIoU_inner_mean', 'cbl_loss_mean',
+    ]
+    summary = {k: metrics[k] for k in keys if k in metrics}
+    summary.update({k: v for k, v in metrics.items() if k.startswith('boundary_mIoU@')})
+    return summary
 
 
 def evaluate_variant(config_path: Path, ckpt_path: Optional[Path], device: torch.device) -> Dict[str, Any]:
@@ -171,32 +151,41 @@ def evaluate_variant(config_path: Path, ckpt_path: Optional[Path], device: torch
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='Evaluate base vs. CBL CloSeNet checkpoints on the test split.')
-    parser.add_argument('--base-config', default='cfg/closenet.yaml', help='Config used to train the no-CBL model')
-    parser.add_argument('--cbl-config', default='cfg/closenet_cbl.yaml', help='Config used to train the CBL model')
-    parser.add_argument('--base-ckpt', default=None, help='Base checkpoint path (default: best mIoU checkpoint in its exp dir)')
-    parser.add_argument('--cbl-ckpt', default=None, help='CBL checkpoint path (default: best mIoU checkpoint in its exp dir)')
+    parser = argparse.ArgumentParser(
+        description='Evaluate CloSeNet checkpoints (baseline / PTB / CBL / PTB+CBL / PTB+postproc) on the test split.'
+    )
+    parser.add_argument('--config', default=None, help='Single-checkpoint mode: eval config (baseline/PTB/PTB+postproc/...)')
+    parser.add_argument('--ckpt', default=None, help='Single-checkpoint mode: checkpoint path (required with --config)')
+    parser.add_argument('--base-config', default='cfg/closenet.yaml', help='Paired mode: config used to train the no-CBL model')
+    parser.add_argument('--cbl-config', default='cfg/closenet_cbl.yaml', help='Paired mode: config used to train the CBL model')
+    parser.add_argument('--base-ckpt', default=None, help='Paired mode: base checkpoint path (default: best mIoU checkpoint in its exp dir)')
+    parser.add_argument('--cbl-ckpt', default=None, help='Paired mode: CBL checkpoint path (default: best mIoU checkpoint in its exp dir)')
     parser.add_argument('--output-json', default='results/closenet_di_test_metrics.json', help='Where to save results')
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     args = parser.parse_args()
 
     device = torch.device(args.device)
 
-    base_metrics = evaluate_variant(
-        _resolve_path(args.base_config), args.base_ckpt and _resolve_path(args.base_ckpt), device,
-    )
-    cbl_metrics = evaluate_variant(
-        _resolve_path(args.cbl_config), args.cbl_ckpt and _resolve_path(args.cbl_ckpt), device,
-    )
-
-    results = {
-        'baseline': base_metrics,
-        'cbl': cbl_metrics,
-        'summary': {
-            'baseline': build_metric_summary(base_metrics),
-            'cbl': build_metric_summary(cbl_metrics),
-        },
-    }
+    if args.config:
+        if not args.ckpt:
+            parser.error('--config requires --ckpt')
+        metrics = evaluate_variant(_resolve_path(args.config), _resolve_path(args.ckpt), device)
+        results = {'metrics': metrics, 'summary': build_metric_summary(metrics)}
+    else:
+        base_metrics = evaluate_variant(
+            _resolve_path(args.base_config), args.base_ckpt and _resolve_path(args.base_ckpt), device,
+        )
+        cbl_metrics = evaluate_variant(
+            _resolve_path(args.cbl_config), args.cbl_ckpt and _resolve_path(args.cbl_ckpt), device,
+        )
+        results = {
+            'baseline': base_metrics,
+            'cbl': cbl_metrics,
+            'summary': {
+                'baseline': build_metric_summary(base_metrics),
+                'cbl': build_metric_summary(cbl_metrics),
+            },
+        }
 
     output_path = _resolve_path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)

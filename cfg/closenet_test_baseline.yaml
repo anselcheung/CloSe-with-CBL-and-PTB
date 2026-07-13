@@ -1,7 +1,6 @@
 # Eval mode 1 — baseline CloSeNet (no auxiliary heads, no post-processing).
-#   python test_closenet.py cfg/closenet_test_baseline.yaml pretrained/closenet.pth
-# NOTE: point exp_logs_path at a fresh/empty dir so the trainer does not auto-load a
-# stray checkpoint over the weights you pass in.
+#   python evaluate_closenet_ckpts.py --config cfg/closenet_test_baseline.yaml --ckpt pretrained/closenet.pth
+# (or: sbatch evaluate_single.sbatch cfg/closenet_test_baseline.yaml pretrained/closenet.pth)
 model: closenet
 device: cuda
 debug: True

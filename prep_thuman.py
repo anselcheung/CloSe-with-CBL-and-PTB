@@ -10,7 +10,7 @@ Example:
   python prep_thuman.py --bm_dir_path $SMPL_PATH/models --stage all
 
 Must be run in an environment with CUDA + pytorch3d + smplx installed (same
-requirement as prep_scan.py itself); see tcml_job.sh for the cluster job wrapper.
+requirement as prep_scan.py itself); see prep_thuman.sbatch for the cluster job wrapper.
 """
 
 import argparse

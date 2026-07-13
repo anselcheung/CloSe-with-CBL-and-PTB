@@ -241,3 +241,38 @@ def boundary_iou(
     if union.item() == 0:
         return 1.0
     return (intersection / union).item()
+
+
+def boundary_inner_mIoU(
+    points: Tensor,
+    preds: Tensor,
+    tgts: Tensor,
+    num_classes: int,
+    k: int = 40,
+    radius: Optional[float] = 0.1,
+) -> tuple[float, float]:
+    """CBL mIoU@boundary / mIoU@inner (arXiv:2203.05272 Sec 3).
+
+    B_l = ground-truth boundary point set, via the same boundary_mask rule
+    boundary_iou already uses, so all three CBL metrics share one boundary
+    definition. mIoU@boundary = mIoU(B_l); mIoU@inner = mIoU(X - B_l), each
+    computed per-shape then averaged (shapes with an empty subset are
+    skipped for that term; NaN if no shape contributes to a term).
+    """
+    n_shapes = preds.size(0)
+    gt_boundary = boundary_mask(points, tgts, k=k, radius=radius)
+    boundary_ious, inner_ious = [], []
+    for i in range(n_shapes):
+        b = gt_boundary[i]
+        if b.sum() > 0:
+            boundary_ious.append(
+                calc_IoU(preds[i][b], tgts[i][b], average='none', num_classes=num_classes)
+            )
+        inner = ~b
+        if inner.sum() > 0:
+            inner_ious.append(
+                calc_IoU(preds[i][inner], tgts[i][inner], average='none', num_classes=num_classes)
+            )
+    m_boundary = torch.stack(boundary_ious).mean(0).mean(-1).item() if boundary_ious else float('nan')
+    m_inner = torch.stack(inner_ious).mean(0).mean(-1).item() if inner_ious else float('nan')
+    return m_boundary, m_inner

@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from lib.utils.metrics import (
+    boundary_inner_mIoU,
     boundary_iou,
     contrastive_boundary_loss,
     cross_entropy,
@@ -206,18 +207,31 @@ class CloSeNetTrainer(BaseTrainer):
                 ]
             )
 
-            # boundary_iou is a metric, not a training loss - only computed at
-            # validation/test time (self.model.training is False there).
-            if self.cbl_cfg.get('enabled', False) and not self.model.training:
+            # boundary_iou / mIoU_boundary / mIoU_inner are eval-only metrics - only
+            # computed at validation/test time (self.model.training is False there).
+            # They only need points + predicted labels + GT labels, so they apply to
+            # every ablation (baseline, PTB, CBL, PTB+CBL), not just CBL-enabled runs.
+            if not self.model.training:
+                eval_preds = labels_from_logits(outp_dict['logits'])
                 loss_dict['boundary_iou'] = torch.tensor(
                     boundary_iou(
                         batch.points,
-                        labels_from_logits(outp_dict['logits']),
+                        eval_preds,
                         batch.y,
                         k=self.cbl_cfg.get('k', 40),
                         radius=self.cbl_cfg.get('radius', 0.1),
                     ),
                     device=self.device,
                 )
+                m_boundary, m_inner = boundary_inner_mIoU(
+                    batch.points,
+                    eval_preds,
+                    batch.y,
+                    num_classes=self.cfg.data.n_classes,
+                    k=self.cbl_cfg.get('k', 40),
+                    radius=self.cbl_cfg.get('radius', 0.1),
+                )
+                loss_dict['mIoU_boundary'] = torch.tensor(m_boundary, device=self.device)
+                loss_dict['mIoU_inner'] = torch.tensor(m_inner, device=self.device)
 
         return loss_dict, self._pack_data(batch, outp_dict)
