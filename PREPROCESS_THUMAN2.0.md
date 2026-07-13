@@ -33,7 +33,7 @@ conda activate close
 > ⚠️ This must run on a **CUDA GPU node** (e.g. the TCML cluster). `prep_scan.py`'s
 > internal texture-color step has a hardcoded `.cuda()` call, so `--device cpu` dry
 > runs will fail there. There is a ready-made SLURM wrapper:
-> [`tcml_job_prep_thuman.sh`](tcml_job_prep_thuman.sh).
+> [`prep_thuman.sbatch`](prep_thuman.sbatch).
 
 ---
 
@@ -140,7 +140,7 @@ python prep_thuman.py \
 Or submit it on the cluster (edit `BM_DIR_PATH` inside first):
 
 ```bash
-sbatch tcml_job_prep_thuman.sh
+sbatch prep_thuman.sbatch
 ```
 
 Reruns are **idempotent** — scans whose `.npz` already exists are skipped unless you

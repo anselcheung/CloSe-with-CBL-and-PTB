@@ -14,8 +14,8 @@ with a different config, no code changes. Everything runs through the same two
 entrypoints:
 
 ```bash
-python train_closenet.py cfg/<config>.yaml            # train
-python test_closenet.py  cfg/<config>.yaml <ckpt>     # single-checkpoint eval
+python train_closenet.py cfg/<config>.yaml                             # train
+python evaluate_closenet_ckpts.py --config cfg/<config>.yaml --ckpt <ckpt>   # single-checkpoint eval
 python evaluate_closenet_ckpts.py --base-config ... --cbl-config ...   # paired eval
 ```
 
@@ -35,12 +35,13 @@ sbatch train_cbl_sweep.sbatch cfg/closenet_ptb.yaml
 sbatch train_cbl_sweep.sbatch cfg/closenet_ptb_cbl.yaml
 ```
 
-For evaluation, follow [`tcml_job_eval.sh`](tcml_job_eval.sh) (single checkpoint,
-uncomment one of the three `CONFIG`/`CHECKPOINT` pairs for baseline / PTB / PTB+postproc)
-or one of the `evaluate_*.sbatch` files for paired/batched test-split scoring:
+For evaluation, use [`evaluate_single.sbatch`](evaluate_single.sbatch) (single checkpoint
+against any config — baseline / PTB / PTB+postproc / CBL / PTB+CBL) or one of the other
+`evaluate_*.sbatch` files for paired/batched test-split scoring:
 
 | Template | What it does |
 |---|---|
+| [`evaluate_single.sbatch <config> <ckpt> [output_json]`](evaluate_single.sbatch) | Generic: scores one checkpoint against one config, e.g. `sbatch evaluate_single.sbatch cfg/closenet_test_ptb_postproc.yaml closenet_ptb_train/checkpoints/<BEST>.pt`. |
 | [`evaluate.sbatch`](evaluate.sbatch) | Scores the best base + best CBL checkpoint on the test split, writes one JSON. |
 | [`evaluate_sweep.sbatch`](evaluate_sweep.sbatch) | Same, hardcoded to the `w001`/`w003`/`w005` weight sweep. |
 | [`evaluate_variants.sbatch <tag>...`](evaluate_variants.sbatch) | Generic: `sbatch evaluate_variants.sbatch enc_w001 allstages_w003 ...` scores any list of `cfg/closenet_cbl_<tag>.yaml` variants. |
@@ -51,14 +52,18 @@ activation hook on TCML) — copy that boilerplate as-is for any new script.
 
 **Prerequisite for anything involving PTB** (boundary/direction heads, `+B`, `+D`,
 post-processing): the scans need precomputed `boundary`/`direction`/`boundary_dist`
-fields, added in-place by `prep_boundaries.py`. Run once, before training:
+fields, added in-place by `prep_boundaries.py`. Run once, before training, via
+[`prep_boundaries.sbatch`](prep_boundaries.sbatch):
 
 ```bash
-python prep_boundaries.py --split cfg/data_split.json           # CloSe-Di
-python prep_boundaries.py --split cfg/data_split_thuman.json     # THuman2.0-derived split
+sbatch prep_boundaries.sbatch cfg/data_split.json           # CloSe-Di
+sbatch prep_boundaries.sbatch cfg/data_split_thuman.json     # THuman2.0-derived split
 ```
 
-CBL and the baseline need no such step.
+CBL and the baseline need no such step (though running it on their splits too is
+harmless and lets `evaluate_closenet_ckpts.py` report `boundary_mIoU@rho` for them as a
+reference number). The THuman2.0-derived split itself is built by
+[`prep_thuman.sbatch`](prep_thuman.sbatch) (see `thuman2_preprocessing_brief.md`).
 
 ## 2. What gets tracked, and where
 
@@ -79,16 +84,21 @@ CBL and the baseline need no such step.
   (in `evaluate_closenet_ckpts.py` and the sbatch "copy best checkpoint" steps) parses
   by `mIoU=` in the filename, so **always keep `mIoU` in `selection_metric`**.
 
-**At test time**:
-- `test_closenet.py cfg/<test_config>.yaml <ckpt>` — single checkpoint, prints
-  `mIoU`, `freq_IoU`, per-class `IoU`, and (if the scans have `boundary_dist`)
-  `boundary_mIoU@<rho>`. Use the matching `cfg/closenet_test_*.yaml` for the
-  checkpoint's mode (see the table in §3) — architecture is otherwise reconstructed
-  from the checkpoint's embedded config.
-- `evaluate_closenet_ckpts.py` — paired base-vs-CBL comparison, reports (per variant)
-  `segm_loss_mean`, `mIoU`, `IoU_per_class`, `freq_IoU`, `boundary_iou_mean`, and
-  `cbl_loss_mean` (only when `training.cbl.enabled`), written to a JSON plus a printed
-  summary. `--cbl-config` swaps in any `cfg/closenet_cbl_*.yaml` variant.
+**At test time** — one script, two modes, both routed through
+`BaseTrainer.evaluate_model()` so every ablation gets the same full metric set:
+`segm_loss_mean`, `mIoU`, `IoU_per_class`, `freq_IoU`, `boundary_iou_mean`,
+`mIoU_boundary_mean`, `mIoU_inner_mean` (all reported regardless of ablation — B-IoU/
+mIoU@boundary/mIoU@inner only need points+preds+GT labels, not CBL), `cbl_loss_mean`
+(only when `training.cbl.enabled`), and any `boundary_mIoU@<rho>` keys (whenever the
+scans have `boundary_dist`):
+- `evaluate_closenet_ckpts.py --config cfg/<test_config>.yaml --ckpt <ckpt>` —
+  single checkpoint against one config (via `evaluate_single.sbatch`). Use the matching
+  `cfg/closenet_test_*.yaml` for the checkpoint's mode (see the table in §3) — this is
+  what carries PTB aux-head reconstruction and SegFix post-processing.
+- `evaluate_closenet_ckpts.py --base-config ... --cbl-config ...` — paired base-vs-CBL
+  comparison (via `evaluate.sbatch`/`evaluate_sweep.sbatch`/`evaluate_variants.sbatch`),
+  written to a JSON plus a printed summary. `--cbl-config` swaps in any
+  `cfg/closenet_cbl_*.yaml` variant.
 
 ## 3. Ablation matrix
 
@@ -100,13 +110,13 @@ CBL and the baseline need no such step.
 | PTB, boundary head only (+B) | copy `cfg/closenet_ptb.yaml`, set `training.loss_weights.direction_loss: 0.0` | head still exists, but only `boundary_loss` shapes the encoder | `train_cbl_sweep.sbatch cfg/closenet_ptb_bonly.yaml` |
 | PTB, direction head only (+D) | copy `cfg/closenet_ptb.yaml`, set `training.loss_weights.boundary_loss: 0.0` | only `direction_loss` shapes the encoder | `train_cbl_sweep.sbatch cfg/closenet_ptb_donly.yaml` |
 | PTB, both heads (+B+D) | `cfg/closenet_ptb.yaml` | `model_arch.aux_heads.enabled: true`, `training.loss_weights.{boundary_loss: 3.0, direction_loss: 0.3}` | `train_cbl_sweep.sbatch cfg/closenet_ptb.yaml` |
-| PTB + SegFix post-processing | train with `cfg/closenet_ptb.yaml`; **evaluate** with `cfg/closenet_test_ptb_postproc.yaml` | `post_processing.{enabled: true, threshold: 0.7, step: null, n_iters: 2}` — eval-only, no retraining | `python test_closenet.py cfg/closenet_test_ptb_postproc.yaml <ptb_ckpt>.pt` |
+| PTB + SegFix post-processing | train with `cfg/closenet_ptb.yaml`; **evaluate** with `cfg/closenet_test_ptb_postproc.yaml` | `post_processing.{enabled: true, threshold: 0.7, step: null, n_iters: 2}` — eval-only, no retraining | `python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_postproc.yaml --ckpt <ptb_ckpt>.pt` |
 | CBL | `cfg/closenet_cbl.yaml` | `training.cbl.enabled: true`, `training.loss_weights.cbl_loss: 0.1` | `train_cbl.sbatch` or `train_cbl_sweep.sbatch cfg/closenet_cbl.yaml` |
 | PTB + CBL combined | `cfg/closenet_ptb_cbl.yaml` | both `model_arch.aux_heads` and `training.cbl` blocks set together | `train_cbl_sweep.sbatch cfg/closenet_ptb_cbl.yaml` |
 
 `+B`/`+D`-only variants and the `_bonly`/`_donly` yamls don't exist yet as files —
 copy `cfg/closenet_ptb.yaml`, rename, zero the one loss weight, and give it a unique
-`exp_logs_path` (see `tcml_job_train.sh` for the exact recipe).
+`exp_logs_path` (see `train_cbl_sweep.sbatch <config>` above for the run recipe).
 
 Reproducing PTB's own ablation table (`closenet_ptb_boundary_brief.md` §5): baseline /
 +B / +D / +B+D / +B+D+postproc, comparing `boundary_mIoU@0.0056`/`@0.014` and

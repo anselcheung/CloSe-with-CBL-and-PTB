@@ -19,7 +19,8 @@ set -eo pipefail
 
 CFG="${1:?Usage: sbatch train_cbl_sweep.sbatch <config.yaml>}"
 
-cd /home/stud102/CloSe-with-CBL-and-PTB
+# SLURM sets this to the directory `sbatch` was invoked from - no hardcoded path needed.
+cd "$SLURM_SUBMIT_DIR"
 mkdir -p logs pretrained
 
 # The close env's conda activation hook (libblas_mkl_activate.sh) references
