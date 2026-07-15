@@ -112,13 +112,15 @@ class CheckpointIO:
         else:
             return {}
 
-    def load(self, filename: str) -> None:
-        state_dict = torch.load(
+    def load(self, filename: str) -> dict:
+        checkpoint = torch.load(
             filename if filename is not None else self.latest_ckp,
             map_location=torch.device(self.cfg.device),
         )
 
+        state_dict = checkpoint.get(f'{self.cfg.model}_model', checkpoint)
         self.module_dict_params[f'{self.cfg.model}_model'].load_state_dict(state_dict)
+        return checkpoint
 
 
 class Logger:
