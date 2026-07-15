@@ -69,10 +69,10 @@ training:
     direction_loss: 0.3
   boundary_beta: 0.6      # up-weight of the (scarce) boundary class in boundary CE
   dir_mask_dist: null     # optional: drop direction loss for points closer than this to a boundary
-  max_epochs: 200
+  max_epochs: 100
   max_iters: -1
   print_it: 200
-  selection_metric: mIoU,freq_IoU
+  selection_metric: mIoU,freq_IoU,boundary_iou
   selection_mode: maximize
   val_it: 200
 eval:
