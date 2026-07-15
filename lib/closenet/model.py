@@ -1,8 +1,16 @@
+from typing import Optional
+
 import torch
 from torch.nn import functional as F
 
 from ..utils.types import EasierDict
-from .nets import AttentionGarmentEncoder, CanonEncoder, DGCNNBase, MLPDecoder
+from .nets import (
+    AttentionGarmentEncoder,
+    BoundaryRefinementModule,
+    CanonEncoder,
+    DGCNNBase,
+    MLPDecoder,
+)
 
 
 class CloSeNet(torch.nn.Module):
@@ -59,6 +67,25 @@ class CloSeNet(torch.nn.Module):
             self.boundary_head = None
             self.direction_head = None
 
+        # * Optional Phase-2 BRM (adapted guided feature propagation). Requires the aux
+        # * heads, since it consumes predicted boundary probability / direction.
+        brm_cfg = model_cfg.get('brm', None)
+        self.use_brm = bool(brm_cfg is not None and brm_cfg.get('enabled', False))
+        if self.use_brm and not self.use_aux_heads:
+            raise ValueError(
+                'model_arch.brm.enabled=True requires model_arch.aux_heads.enabled=True '
+                '(BRM consumes the predicted boundary probability and direction).'
+            )
+        if self.use_brm:
+            self.brm = BoundaryRefinementModule(
+                channels=segm_dec_cfg.channels[-1],
+                k=brm_cfg.get('k', 6),
+                alpha=brm_cfg.get('alpha', 1.0),
+                r_init=brm_cfg.get('r_init', 0.05),
+            )
+        else:
+            self.brm = None
+
     def _encode(self, data: EasierDict, **kwargs) -> EasierDict:
         x_max, conv_out, data = self.pc_enc(data, **kwargs)
         # * Get per-point features
@@ -79,7 +106,9 @@ class CloSeNet(torch.nn.Module):
             attn_weights=attn_weights,
         )
 
-    def _decode(self, data: EasierDict, **kwargs) -> EasierDict:
+    def _decode(
+        self, data: EasierDict, points_xyz: Optional[torch.Tensor] = None, **kwargs
+    ) -> EasierDict:
         feat = (
             torch.cat([data.pc_features, data.part_features, data.garm_features], dim=-1)
             .permute(0, 2, 1)
@@ -93,11 +122,19 @@ class CloSeNet(torch.nn.Module):
             out.pred_dirs = F.normalize(
                 self.direction_head(feat, **kwargs), dim=1, eps=1e-8
             )  # (B, 3, N)
+            if self.use_brm:
+                # * Phase 2: refine the pre-logit features with the BRM, then re-run them
+                # * through the *same* trained classifier layer (mirrors PTB, where GFP
+                # * replaces what feeds the existing classifier rather than adding a new one).
+                pb = F.softmax(out.boundary_logits, dim=1)[:, 1, :]  # (B, N)
+                refined = self.brm(decoder_features, points_xyz, pb, out.pred_dirs)
+                out.logits = self.segm_dec.layers[-1](refined)
         return out
 
     def forward(self, data: EasierDict, **kwargs) -> EasierDict:
         encodings = self._encode(data, **kwargs)
-        decoded = self._decode(encodings, **kwargs)
+        points_xyz = data.points[..., :3] if hasattr(data, 'points') else None
+        decoded = self._decode(encodings, points_xyz=points_xyz, **kwargs)
         logits = decoded.logits
         out = EasierDict(
             **data,

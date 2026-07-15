@@ -1,0 +1,89 @@
+# CloSeNet + PTB (Phase 1 + Phase 2): baseline architecture, the auxiliary boundary and
+# direction heads, and the Boundary-aware Refinement Module (BRM) -- CloSeNet's adapted
+# stand-in for PTB's guided feature propagation (ptb_phase2_postproc_fix_brief.md, Part A).
+# Requires scans processed by prep_boundaries.py (boundary/direction/boundary_dist fields).
+#   python train_closenet.py cfg/closenet_ptb_brm.yaml
+model: closenet
+device: cuda
+debug: True
+exp_logs_path: ./closenet_ptb_brm_train
+optim:
+  name: adam
+  lr: 5.0e-3
+  milestones: []
+  gamma: 0.1
+  weight_decay: 0.0
+data:
+  split_file: ./cfg/data_split_thuman.json
+  data_path: ./data
+  n_classes: 18
+  pointcloud_samples: 2048
+  num_workers: 0
+  batch_size: 4
+  input:
+    - points
+    - colors
+    - normals
+    - smpl
+model_arch:
+  garm_enc:
+    name: attention_garm
+    dropout: 0.0
+    emb_dim: 64
+    gar_emb_dim: 64
+    key_mask: true
+    max_norm: 2.0
+    n_embeddings: 18
+    n_heads: 4
+  pc_enc:
+    channels_sum: 192
+    emb_dim: 1024
+    inp_dim: 9
+    k: 40
+    name: dgcnn
+    use_tnet: true
+  part_enc:
+    name: canon_encoder
+  segm_dec:
+    channels:
+    - 512
+    - 512
+    - 512
+    - 512
+    - 256
+    dropout: 0.5
+    emb_dim: 512
+    name: mlp
+    segm_input: 1283
+    slope: 0.2
+  # PTB auxiliary heads (Phase 1). Required by brm below.
+  aux_heads:
+    enabled: true
+    boundary_channels: [256, 128]
+    direction_channels: [256, 128]
+  # Phase 2 BRM (adapted guided feature propagation, lib/closenet/nets/brm.py). k matches
+  # PTB's guided-interpolation k=4 (bumped slightly since there's no upsampling to help
+  # here); r_init is scale-rescaled for CloSe's unit-bbox scans (PTB's own r=0.125 was
+  # tuned for room-scale S3DIS in meters) and left learnable.
+  brm:
+    enabled: true
+    k: 6
+    alpha: 1.0
+    r_init: 0.05
+training:
+  batch_size: 16
+  backup_it: -1
+  loss_weights:
+    segm_loss: 1.0
+    boundary_loss: 3.0
+    direction_loss: 0.3
+  boundary_beta: 0.6      # up-weight of the (scarce) boundary class in boundary CE
+  dir_mask_dist: null     # optional: drop direction loss for points closer than this to a boundary
+  max_epochs: 100
+  max_iters: -1
+  print_it: 200
+  selection_metric: mIoU,freq_IoU,boundary_iou
+  selection_mode: maximize
+  val_it: 200
+eval:
+  boundary_radii: [0.0056, 0.014]   # ~1cm / 2.5cm on a ~1.8m human in a unit bbox

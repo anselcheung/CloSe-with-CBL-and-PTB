@@ -36,13 +36,16 @@ def _relabel_one(labels, xyz, boundary_prob, dirs, threshold, step, n_iters):
     if not mask.any() or step == 0.0:
         return labels
 
-    # Directions are unit vectors; target positions are fixed across iterations.
-    targets = xyz[mask] + step * dirs[mask]
-    _, nn_idx = tree.query(targets, k=1)  # index (into all points) of the interior neighbour
     move_idx = np.nonzero(mask)[0]
-
+    # Directions are unit vectors; `pos` is a virtual position that walks further along
+    # them each iteration (total distance after i iterations is i * step), re-querying the
+    # tree each time. This lets n_iters actually control how far the label search travels,
+    # and lets chains of adjacent boundary points hand labels down the line via `out`.
+    pos = xyz[mask].copy()
     out = labels.copy()
     for _ in range(max(1, n_iters)):
+        pos = pos + step * dirs[mask]
+        _, nn_idx = tree.query(pos, k=1)  # index (into all points) of the interior neighbour
         out[move_idx] = out[nn_idx]
     return out
 
@@ -92,3 +95,34 @@ def segfix_relabel(
 
     out = out.reshape(labels_np.shape)
     return torch.from_numpy(out).to(device=device, dtype=dtype)
+
+
+if __name__ == '__main__':
+    # Regression + bug-catching check for _relabel_one's iteration semantics: a chain of
+    # 9 points along a line (x=0..8) with a 3-point-wide boundary band (idx 3,4,5) between
+    # two differently-labeled interior regions, direction pointing toward the higher-x side,
+    # step=1 (one grid spacing).
+    xyz = np.stack([np.arange(9, dtype=np.float64), np.zeros(9), np.zeros(9)], axis=1)
+    labels = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1])
+    boundary_prob = np.array([0.0, 0.0, 0.0, 0.9, 0.9, 0.9, 0.0, 0.0, 0.0])
+    dirs = np.zeros((9, 3))
+    dirs[3] = dirs[4] = dirs[5] = [1.0, 0.0, 0.0]
+
+    out1 = _relabel_one(labels, xyz, boundary_prob, dirs, threshold=0.5, step=1.0, n_iters=1)
+    # n_iters=1 hops every boundary point exactly one grid step forward (identical to the
+    # pre-fix code, which always got the first iteration right): 3->4 (still 0), 4->5
+    # (still 0), 5->6 (already 1).
+    assert out1.tolist() == [0, 0, 0, 0, 0, 1, 1, 1, 1], out1
+
+    out2 = _relabel_one(labels, xyz, boundary_prob, dirs, threshold=0.5, step=1.0, n_iters=2)
+    # n_iters=2 should walk boundary points a cumulative 2 steps and re-query at each hop,
+    # so point 3 (the innermost boundary point, 2 hops from the label-1 region) picks up the
+    # propagated label. The pre-fix code queried a *fixed* single-step target [4,5,6] on every
+    # iteration instead of advancing further, so point 3 (whose fixed target is point 4) only
+    # ever saw point 4's label, which reaches 1 only via a same-iteration chain coincidence
+    # that does NOT occur here -- pre-fix this assertion fails with out2[3] == 0.
+    assert out2.tolist() == [0, 0, 0, 1, 1, 1, 1, 1, 1], (
+        f'n_iters=2 should propagate the interior label a second hop in, got {out2.tolist()}'
+    )
+
+    print('postprocess._relabel_one iteration checks passed:', out1.tolist(), out2.tolist())

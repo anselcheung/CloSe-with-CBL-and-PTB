@@ -3,7 +3,9 @@
 This branch (`dev`) combines two independent additions to CloSeNet:
 
 - **PTB** (Push-the-Boundary, `closenet_ptb_boundary_brief.md`): auxiliary boundary +
-  direction heads, plus an optional SegFix-style test-time post-processing step.
+  direction heads (Phase 1), an adapted guided-propagation refinement module (Phase 2,
+  BRM, `ptb_phase2_postproc_fix_brief.md`), plus an optional SegFix-style test-time
+  post-processing step (Phase 3).
 - **CBL** (Contrastive Boundary Loss, arXiv:2203.05272, `cfg/README.md`): a contrastive
   loss that pulls same-label neighbor features together and pushes different-label
   ones apart.
@@ -51,7 +53,7 @@ All sbatch templates `cd` to the repo root, activate the `close` conda env, and
 activation hook on TCML) — copy that boilerplate as-is for any new script.
 
 **Prerequisite for anything involving PTB** (boundary/direction heads, `+B`, `+D`,
-post-processing): the scans need precomputed `boundary`/`direction`/`boundary_dist`
+post-processing, BRM): the scans need precomputed `boundary`/`direction`/`boundary_dist`
 fields, added in-place by `prep_boundaries.py`. Run once, before training, via
 [`prep_boundaries.sbatch`](prep_boundaries.sbatch):
 
@@ -111,6 +113,7 @@ scans have `boundary_dist`):
 | PTB, direction head only (+D) | copy `cfg/closenet_ptb.yaml`, set `training.loss_weights.boundary_loss: 0.0` | only `direction_loss` shapes the encoder | `train_cbl_sweep.sbatch cfg/closenet_ptb_donly.yaml` |
 | PTB, both heads (+B+D) | `cfg/closenet_ptb.yaml` | `model_arch.aux_heads.enabled: true`, `training.loss_weights.{boundary_loss: 3.0, direction_loss: 0.3}` | `train_cbl_sweep.sbatch cfg/closenet_ptb.yaml` |
 | PTB + SegFix post-processing | train with `cfg/closenet_ptb.yaml`; **evaluate** with `cfg/closenet_test_ptb_postproc.yaml` | `post_processing.{enabled: true, threshold: 0.7, step: null, n_iters: 2}` — eval-only, no retraining | `python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_postproc.yaml --ckpt <ptb_ckpt>.pt` |
+| PTB + BRM (Phase 2, guided refinement) | `cfg/closenet_ptb_brm.yaml`; **evaluate** with `cfg/closenet_test_ptb_brm.yaml` | `model_arch.brm.{enabled: true, k: 6, alpha: 1.0, r_init: 0.05}` — requires `model_arch.aux_heads.enabled: true`, retrains (BRM is part of the forward pass) | `train_cbl_sweep.sbatch cfg/closenet_ptb_brm.yaml`, then `python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_brm.yaml --ckpt <ptb_brm_ckpt>.pt` |
 | CBL | `cfg/closenet_cbl.yaml` | `training.cbl.enabled: true`, `training.loss_weights.cbl_loss: 0.1` | `train_cbl.sbatch` or `train_cbl_sweep.sbatch cfg/closenet_cbl.yaml` |
 | PTB + CBL combined | `cfg/closenet_ptb_cbl.yaml` | both `model_arch.aux_heads` and `training.cbl` blocks set together | `train_cbl_sweep.sbatch cfg/closenet_ptb_cbl.yaml` |
 
@@ -119,8 +122,10 @@ copy `cfg/closenet_ptb.yaml`, rename, zero the one loss weight, and give it a un
 `exp_logs_path` (see `train_cbl_sweep.sbatch <config>` above for the run recipe).
 
 Reproducing PTB's own ablation table (`closenet_ptb_boundary_brief.md` §5): baseline /
-+B / +D / +B+D / +B+D+postproc, comparing `boundary_mIoU@0.0056`/`@0.014` and
-`boundary_iou` across the five.
++B / +D / +B+D / +B+D+postproc / +B+D+BRM, comparing `boundary_mIoU@0.0056`/`@0.014` and
+`boundary_iou` across the six. Per PTB's own numbers (quoted in
+`ptb_phase2_postproc_fix_brief.md` Part A.4), expect most of the boundary-mIoU gain from
+`+B+D` alone, with BRM closing roughly the remaining third.
 
 ### CBL-side ablations
 
