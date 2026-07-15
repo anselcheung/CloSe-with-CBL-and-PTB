@@ -116,6 +116,7 @@ scans have `boundary_dist`):
 | PTB + BRM (Phase 2, guided refinement) | `cfg/closenet_ptb_brm.yaml`; **evaluate** with `cfg/closenet_test_ptb_brm.yaml` | `model_arch.brm.{enabled: true, k: 6, alpha: 1.0, r_init: 0.05}` — requires `model_arch.aux_heads.enabled: true`, retrains (BRM is part of the forward pass) | `train_cbl_sweep.sbatch cfg/closenet_ptb_brm.yaml`, then `python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_brm.yaml --ckpt <ptb_brm_ckpt>.pt` |
 | CBL | `cfg/closenet_cbl.yaml` | `training.cbl.enabled: true`, `training.loss_weights.cbl_loss: 0.1` | `train_cbl.sbatch` or `train_cbl_sweep.sbatch cfg/closenet_cbl.yaml` |
 | PTB + CBL combined | `cfg/closenet_ptb_cbl.yaml` | both `model_arch.aux_heads` and `training.cbl` blocks set together | `train_cbl_sweep.sbatch cfg/closenet_ptb_cbl.yaml` |
+| PTB + BRM + CBL combined | `cfg/closenet_ptb_brm_cbl.yaml`; **evaluate** with `cfg/closenet_test_ptb_brm.yaml` | `model_arch.brm` and `training.cbl` blocks set together on top of `aux_heads` -- orthogonal additions (BRM is a forward-pass module, CBL is a training-only loss on features), so this is just their union | `train_cbl_sweep.sbatch cfg/closenet_ptb_brm_cbl.yaml`, then `python evaluate_closenet_ckpts.py --config cfg/closenet_test_ptb_brm.yaml --ckpt <ptb_brm_cbl_ckpt>.pt` |
 
 `+B`/`+D`-only variants and the `_bonly`/`_donly` yamls don't exist yet as files —
 copy `cfg/closenet_ptb.yaml`, rename, zero the one loss weight, and give it a unique
