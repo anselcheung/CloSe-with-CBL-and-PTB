@@ -57,11 +57,13 @@ class BoundaryRefinementModule(nn.Module):
         dist = torch.cdist(xyz, xyz)  # (B, N, N)
         nn_dist, nn_idx = dist.topk(k, dim=-1, largest=False)  # (B, N, k)
 
-        nbr_xyz = torch.gather(
-            xyz.unsqueeze(1).expand(-1, N, -1, -1),
-            2,
-            nn_idx.unsqueeze(-1).expand(-1, -1, -1, 3),
-        )  # (B, N, k, 3)
+        # Batched fancy-indexing instead of expand+gather: expand+gather makes gather's
+        # backward scatter into a dense (B, N, N, C) buffer (16GiB+ at N=2048, C=256), since
+        # its input is logically the fully-expanded (B, N, N, C) tensor. Indexing with a
+        # (B, N, k)-shaped index tensor keeps every intermediate at (B, N, k, C).
+        batch_idx = torch.arange(B, device=feat.device).view(B, 1, 1).expand(-1, N, k)
+
+        nbr_xyz = xyz[batch_idx, nn_idx]  # (B, N, k, 3)
         rel = nbr_xyz - xyz.unsqueeze(2)  # (B, N, k, 3)
         dirs = pred_dirs.permute(0, 2, 1)  # (B, N, 3)
         cos = (rel * dirs.unsqueeze(2)).sum(-1)  # (B, N, k)
@@ -73,11 +75,7 @@ class BoundaryRefinementModule(nn.Module):
         w = w / w.sum(-1, keepdim=True).clamp(min=1e-8)  # (B, N, k)
 
         feat_t = feat.permute(0, 2, 1)  # (B, N, C)
-        nbr_feat = torch.gather(
-            feat_t.unsqueeze(1).expand(-1, N, -1, -1),
-            2,
-            nn_idx.unsqueeze(-1).expand(-1, -1, -1, C),
-        )  # (B, N, k, C)
+        nbr_feat = feat_t[batch_idx, nn_idx]  # (B, N, k, C)
         agg = (w.unsqueeze(-1) * nbr_feat).sum(2).permute(0, 2, 1)  # (B, C, N)
 
         return self.merge(agg) + feat
