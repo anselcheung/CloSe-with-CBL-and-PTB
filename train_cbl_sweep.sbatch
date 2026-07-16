@@ -3,7 +3,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=day
 #SBATCH --mem-per-cpu=12G
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2080ti
 #SBATCH --time=06:00:00
 #SBATCH -o logs/train_cbl_sweep_%j.out
 #SBATCH -e logs/train_cbl_sweep_%j.err

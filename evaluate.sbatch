@@ -5,8 +5,8 @@
 #SBATCH --mem-per-cpu=12G
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
-#SBATCH -o logs/evaluate_%j.out
-#SBATCH -e logs/evaluate_%j.err
+#SBATCH -o logs/evaluate_base_cbl_%j.out
+#SBATCH -e logs/evaluate_base_cbl_%j.err
 
 # Evaluates the best base and CBL checkpoints (by validation mIoU) on the CloSe-Di
 # test split and writes results/closenet_di_test_metrics.json. Meant to be submitted
