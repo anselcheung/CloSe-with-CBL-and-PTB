@@ -1,6 +1,7 @@
 model: closenet
 device: cuda
 debug: True
+seed: 42               # RNG seed (train_closenet.py calls fix_seeds(seed))
 exp_logs_path: ./closenet_train_cbl_enc_w020
 optim:
   name: adam

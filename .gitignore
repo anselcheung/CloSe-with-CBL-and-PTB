@@ -5,6 +5,7 @@ data/
 logs/
 models/
 checkpoints/
+.DS_store
 
 # Training runs: checkpoints, tensorboard summaries (see summary/ above), debug logs.
 closenet_train*/
@@ -13,6 +14,11 @@ closenet_train*/
 # corresponding .sbatch script, not meant to be committed.
 logs/
 results/
+
+# Seeded, timestamped experiment runs from train_run.sbatch (runs/<experiment_name>/
+# <date_time>/: config.yaml, checkpoints/, summary/, debug.log) - regenerate by
+# re-running train_run.sbatch, not meant to be committed.
+/runs/
 
 # Trained checkpoints copied out by train_cbl_sweep.sbatch / train_base.sbatch.
 # closenet_cfg.yaml / closenet.pth (the original pretrained release) are the only

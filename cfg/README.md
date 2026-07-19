@@ -6,6 +6,13 @@ enabled, which feature it's applied to, and its loss weight. Each one is meant t
 run with `python train_closenet.py cfg/<name>.yaml` or `sbatch train_cbl_sweep.sbatch
 cfg/<name>.yaml` (the latter also copies the best checkpoint to `pretrained/<name>.pt`).
 
+Every training config also sets a `seed:` field (`train_closenet.py` calls
+`fix_seeds(cfg.get('seed', 42))`, `lib/utils/misc.py:fix_seeds`, before building the
+dataset/model), so re-running the same config with the same seed reproduces the same
+run. To launch a seeded run into its own timestamped directory instead of the config's
+fixed `exp_logs_path`, use `sbatch train_run.sbatch cfg/<name>.yaml <experiment_name>
+[seed]` - see the header of `train_run.sbatch` for details.
+
 ## Naming convention
 
 `closenet_cbl_<feature>_w<NNN>.yaml`, where:
@@ -14,9 +21,8 @@ cfg/<name>.yaml` (the latter also copies the best checkpoint to `pretrained/<nam
 - `w<NNN>` encodes the `cbl_loss` weight as `weight * 100`, zero-padded to 3 digits
   (e.g. `w001` = 0.01, `w010` = 0.10, `w020` = 0.20).
 - `_rerun` suffix marks an independent re-run of the same hyperparameters (different
-  random init/data order - training never fixes a seed, see `lib/utils/misc.py:fix_seeds`
-  which is only called by `demo.py`/`interactive_tool.py`, not `train_closenet.py`) with
-  a fresh `exp_logs_path` so it doesn't resume from the first run's checkpoints.
+  seed, different random init/data order) with both a different `seed:` and a fresh
+  `exp_logs_path` so it doesn't resume from the first run's checkpoints.
 
 ## `training.cbl.feature_source`
 

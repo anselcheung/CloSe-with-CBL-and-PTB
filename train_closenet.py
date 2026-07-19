@@ -3,6 +3,7 @@ import warnings
 from lib.utils.types import EasierDict
 
 from lib import factory
+from lib.utils.misc import fix_seeds
 import yaml
 import sys
 
@@ -10,6 +11,8 @@ warnings.filterwarnings('ignore')
 
 if __name__ == '__main__':
     cfg = EasierDict(yaml.load(open(sys.argv[1], 'r'), Loader=yaml.FullLoader))
+
+    fix_seeds(cfg.get('seed', 42))
 
     train_data, val_data, test_data = factory.get_dataset_split(cfg)
 

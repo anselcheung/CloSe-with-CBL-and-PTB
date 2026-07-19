@@ -1,6 +1,8 @@
 model: closenet
 device: cuda
 debug: True
+seed: 43               # different from the w003 run's seed (42) - this _rerun exists to
+                        # check reproducibility of the result under an independent run
 exp_logs_path: ./closenet_train_cbl_allstages_w003_rerun
 optim:
   name: adam
