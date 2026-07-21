@@ -250,7 +250,8 @@ def boundary_inner_mIoU(
     num_classes: int,
     k: int = 40,
     radius: Optional[float] = 0.1,
-) -> tuple[float, float]:
+    return_per_class: bool = False,
+):
     """CBL mIoU@boundary / mIoU@inner (arXiv:2203.05272 Sec 3).
 
     B_l = ground-truth boundary point set, via the same boundary_mask rule
@@ -258,6 +259,11 @@ def boundary_inner_mIoU(
     definition. mIoU@boundary = mIoU(B_l); mIoU@inner = mIoU(X - B_l), each
     computed per-shape then averaged (shapes with an empty subset are
     skipped for that term; NaN if no shape contributes to a term).
+
+    Returns the scalar (m_boundary, m_inner) pair by default. With
+    return_per_class=True, also returns the per-class vectors (as plain lists,
+    NaN-filled if no shape contributed to that term) the scalars are averaged
+    from -- (m_boundary, m_inner, per_class_boundary, per_class_inner).
     """
     n_shapes = preds.size(0)
     gt_boundary = boundary_mask(points, tgts, k=k, radius=radius)
@@ -273,6 +279,13 @@ def boundary_inner_mIoU(
             inner_ious.append(
                 calc_IoU(preds[i][inner], tgts[i][inner], average='none', num_classes=num_classes)
             )
-    m_boundary = torch.stack(boundary_ious).mean(0).mean(-1).item() if boundary_ious else float('nan')
-    m_inner = torch.stack(inner_ious).mean(0).mean(-1).item() if inner_ious else float('nan')
+
+    nan_per_class = torch.full((num_classes,), float('nan'))
+    per_class_boundary = torch.stack(boundary_ious).mean(0) if boundary_ious else nan_per_class
+    per_class_inner = torch.stack(inner_ious).mean(0) if inner_ious else nan_per_class
+    m_boundary = per_class_boundary.mean(-1).item() if boundary_ious else float('nan')
+    m_inner = per_class_inner.mean(-1).item() if inner_ious else float('nan')
+
+    if return_per_class:
+        return m_boundary, m_inner, per_class_boundary.tolist(), per_class_inner.tolist()
     return m_boundary, m_inner

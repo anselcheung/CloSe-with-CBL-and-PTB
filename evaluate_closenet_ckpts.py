@@ -4,8 +4,9 @@ CloSe-Di test split.
 
 Two modes, both routed through lib.factory + BaseTrainer.evaluate_model() so every
 ablation shares the exact same metric computation (mIoU, per-class IoU,
-frequency-weighted IoU, boundary_iou, mIoU@boundary, mIoU@inner, and boundary_mIoU@rho
-whenever the scans carry boundary_dist, i.e. prep_boundaries.py has been run):
+frequency-weighted IoU, boundary_iou, mIoU@boundary, mIoU@inner, per-class
+boundary/inner IoU, and boundary_mIoU@rho whenever the scans carry boundary_dist,
+i.e. prep_boundaries.py has been run):
 
   Single-checkpoint mode (--config/--ckpt) - evaluate one checkpoint against one config,
   e.g. a PTB checkpoint with SegFix post-processing enabled via a dedicated test config:
@@ -123,6 +124,8 @@ def evaluate_checkpoint(cfg: EasierDict, model: torch.nn.Module, ckpt_path: Path
         'boundary_iou_mean': float(val_dict['boundary_iou']),
         'mIoU_boundary_mean': float(val_dict['mIoU_boundary']),
         'mIoU_inner_mean': float(val_dict['mIoU_inner']),
+        'boundary_IoU_per_class': [float(x) for x in val_dict['IoU_boundary_per_class']],
+        'inner_IoU_per_class': [float(x) for x in val_dict['IoU_inner_per_class']],
     }
     if cbl_enabled:
         metrics['cbl_loss_mean'] = float(val_dict.get('cbl_loss', float('nan')))

@@ -12,7 +12,7 @@ from torch_geometric.data.batch import Batch
 from tqdm import tqdm
 
 from lib.utils.config import CheckpointIO, Logger
-from lib.utils.metrics import IoU, boundary_region_mIoU, frequency_weighted_IoU
+from lib.utils.metrics import IoU, boundary_inner_mIoU, boundary_region_mIoU, frequency_weighted_IoU
 from lib.utils.misc import format_time, mkdir
 from lib.utils.types import EasierDict
 
@@ -272,5 +272,21 @@ class BaseTrainer(object):
                 val_dict[f'boundary_mIoU@{rho}'] = boundary_region_mIoU(
                     labels, tgts, bdist, rho, num_classes=self.cfg.data.n_classes
                 )
+
+        # * Per-class breakdown of mIoU@boundary / mIoU@inner, computed post-hoc over
+        # * the full stacked val/test set (same pattern as IoU/mIoU/freq_IoU above)
+        # * rather than through the per-batch val_step averaging, which isn't set up
+        # * to preserve a class dimension. Same k/radius as the per-batch scalar
+        # * boundary_iou/mIoU_boundary/mIoU_inner in ClosenetTrainer.step, so this is
+        # * directly consistent with mIoU_boundary_mean/mIoU_inner_mean.
+        _, _, per_class_boundary, per_class_inner = boundary_inner_mIoU(
+            outp_dict['points'], labels, tgts,
+            num_classes=self.cfg.data.n_classes,
+            k=self.cbl_cfg.get('k', 40),
+            radius=self.cbl_cfg.get('radius', 0.1),
+            return_per_class=True,
+        )
+        val_dict['IoU_boundary_per_class'] = per_class_boundary
+        val_dict['IoU_inner_per_class'] = per_class_inner
 
         return val_dict, outp_dict
