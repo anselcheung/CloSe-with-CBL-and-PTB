@@ -1,0 +1,140 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\title{CloSeNet Ablation Report}
+\date{}
+
+\begin{document}
+\maketitle
+\sloppy
+
+\section{Headline Results}
+
+Mean $\pm$ std across 3 seeds for all 10 ablations, on mIoU, freq\_IoU, B-IoU,
+mIoU@boundary, mIoU@inner, and segm\_loss. The best value per column is bolded. This
+table is the anchor of the paper -- everything else supports it. Since B-IoU is the
+headline metric, a $\Delta$ B-IoU vs.\ baseline column is also reported.
+
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{\input{table_headline.tex}}
+\end{table}
+
+\section{CBL $\times$ PTB Factorial}
+
+This is the central scientific claim: does combining CBL and PTB help more, less, or
+the same as their individual effects would predict? The interaction plot below shows
+the four cells (baseline, +CBL, +PTB, +CBL+PTB) as two lines -- \{no CBL, +CBL\} --
+over \{no PTB, +PTB\}, for both B-IoU and mIoU, with error bars from seed std.
+Parallel lines indicate additive (independent) effects; crossing or diverging lines
+indicate an interaction.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/interaction_cbl_ptb.png}
+\caption{CBL $\times$ PTB interaction plot (error bars: seed std).}
+\end{figure}
+
+The table below is the quantitative version of the plot: the main effect of CBL
+(average of CBL rows minus non-CBL rows), the main effect of PTB (average of PTB
+rows minus non-PTB rows), and the interaction term
+$(\text{PTB+CBL} - \text{PTB}) - (\text{CBL} - \text{baseline})$, each reported as
+mean $\pm$ std across the 3 matched seeds. Where an effect is smaller than 2$\times$
+its std, the cell states ``no detectable effect at $n{=}3$ seeds'' rather than
+reporting a possibly spurious sign.
+
+\begin{table}[h]
+\centering
+\input{table_factorial_effects.tex}
+\end{table}
+
+\section{BRM Results}
+
+This is the likely headline finding: does the Boundary-aware Refinement Module,
+combined with CBL, beat PTB alone, PTB+CBL, and PTB+BRM individually? PTB+BRM+CBL does not clearly beat every comparison on B-IoU (see: PTB+BRM+CBL vs.\ PTB, PTB+BRM+CBL vs.\ PTB+CBL, PTB+BRM+CBL vs.\ PTB+BRM).
+The synergy claim being tested is whether adding CBL on top of BRM specifically
+helps more than adding CBL elsewhere (compare the CBL main effect from Section 2 to
+the PTB+BRM+CBL vs.\ PTB+BRM row below).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{figures/brm_grouped_bars.png}
+\caption{mIoU and B-IoU per PTB-family config, error bars: seed std.}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{\input{table_brm_pairwise.tex}}
+\end{table}
+
+\section{SegFix Post-Processing Effect}
+
+Does post-processing help uniformly, or does its benefit shrink once the model
+itself is already boundary-aware? Going from PTB to PTB+BRM+CBL, the SegFix B-IoU delta is not monotonic (PTB: +0.01, PTB+CBL: -0.03, PTB+BRM: -0.38, PTB+BRM+CBL: -0.11 pp).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{figures/segfix_delta.png}
+\caption{B-IoU improvement from SegFix, paired by run (same checkpoint, with vs.\ without post-processing).}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{\input{table_segfix_effect.tex}}
+\end{table}
+
+\section{Per-Class Breakdown}
+
+Classes that regress under + PTB + BRM + CBL: Jacket, Hat, Hoodies, Vest, Skirt, TShirt, Hair, Body. Correlation between a class's baseline mean IoU and its baseline seed-to-seed std is -0.67 (lower-IoU classes do show higher seed variance). Classes that regress on B-IoU: Jacket, Hat, Hoodies, Vest, Skirt, TShirt, Hair, Body.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.65\linewidth]{figures/per_class_heatmap.png}
+\caption{Per-class IoU, rows sorted by baseline IoU descending.}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.65\linewidth]{figures/per_class_delta.png}
+\caption{Per-class IoU delta: best config vs.\ baseline.}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.65\linewidth]{figures/per_class_delta_biou.png}
+\caption{Per-class B-IoU delta: best config vs.\ baseline.}
+\end{figure}
+
+\section{Training Dynamics}
+
+Training curves (mean $\pm$ seed std ribbon) for baseline, +CBL, +PTB+CBL, and
++PTB+BRM+CBL. val/cbl\_loss decreases by 0.0695 from start to end of training, evidence CBL is doing something. No config's best checkpoint was selected from a late epoch.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/training_dynamics.png}
+\caption{Val loss, val mIoU, val B-IoU, and train loss over training.}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\input{table_best_epoch.tex}
+\end{table}
+
+\section{Boundary vs.\ Inner Tradeoff}
+
+Do boundary-region improvements come at the cost of inner-region accuracy? Each
+point is one (config, seed) run; an ideal method moves points up and to the right
+(better at both), while a method trading inner accuracy for boundary accuracy would
+move points up and to the left.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{figures/boundary_inner_scatter.png}
+\caption{mIoU@inner vs.\ mIoU@boundary, one point per (config, seed).}
+\end{figure}
+
+\end{document}
