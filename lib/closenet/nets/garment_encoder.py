@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 from .mlp import MLPDecoder
@@ -29,6 +30,17 @@ class AttentionGarmentEncoder(nn.Module):
             embedding_dim=cfg.gar_emb_dim,
             max_norm=cfg.max_norm,
         )
+
+        clip_init_path = cfg.get("clip_init_path", None)
+        if clip_init_path is not None:
+            init = np.load(clip_init_path)
+            expected_shape = (cfg.n_embeddings, cfg.gar_emb_dim)
+            assert init.shape == expected_shape, (
+                f"codebook init shape mismatch: {init.shape} vs {expected_shape}"
+            )
+            with torch.no_grad():
+                self.garm_embedding.weight.copy_(torch.from_numpy(init))
+            self.garm_embedding.weight.requires_grad = not cfg.get("freeze_g", False)
 
         self.attn = nn.MultiheadAttention(
             embed_dim=cfg.emb_dim,
