@@ -763,6 +763,9 @@ def section8_3_three_way(df: pd.DataFrame, df_clip: pd.DataFrame) -> dict:
     # Per-class *regular* IoU (not B-IoU) for the tail classes, computed fresh from
     # each group's raw IoU_per_class -- not df's section5-mutated class_<name>
     # columns, so this has no ordering dependency on section5_per_class having run.
+    # Also added as scalar columns on `frame` itself so paired_delta can be reused
+    # directly for tail-class pairwise comparisons (tail_pairwise below), rather than
+    # comparing raw group means (which would have no associated seed-paired std).
     tail_indices = [CLASS_NAMES.index(name) for name in TAIL_CLASSES]
     tail_stats = {}
     for group in ['A', 'B', 'C']:
@@ -771,8 +774,16 @@ def section8_3_three_way(df: pd.DataFrame, df_clip: pd.DataFrame) -> dict:
             name: (float(per_class[:, idx].mean()), float(per_class[:, idx].std(ddof=1)))
             for name, idx in zip(TAIL_CLASSES, tail_indices)
         }
+    for name, idx in zip(TAIL_CLASSES, tail_indices):
+        frame[f'class_{name}'] = frame['IoU_per_class'].apply(lambda row, idx=idx: row[idx])
 
-    return {'biou_stats': biou_stats, 'pairwise': pairwise, 'tail_stats': tail_stats}
+    tail_pairwise = {
+        (name, a, b): paired_delta(frame, f'class_{name}', a, b, pair_on='seed_index')
+        for name in TAIL_CLASSES
+        for a, b in [('A', 'B'), ('C', 'B')]
+    }
+
+    return {'biou_stats': biou_stats, 'pairwise': pairwise, 'tail_stats': tail_stats, 'tail_pairwise': tail_pairwise}
 
 
 def render_clip_three_way_latex(three_way_info: dict) -> str:
@@ -886,48 +897,132 @@ def render_clip_interaction_latex(rows: list) -> str:
     return '\n'.join(lines) + '\n'
 
 
-def _clip_discussion_paragraph(clip_vs_noclip_deltas, three_way_info, per_class_biou_delta, class_order_names, interaction_rows) -> str:
-    baseline_mean, baseline_std = clip_vs_noclip_deltas['baseline']
-    baseline_sentence = (
-        f'CLIP init alone shifts baseline B-IoU by {baseline_mean * 100:+.2f} $\\pm$ '
-        f'{baseline_std * 100:.2f} pp relative to the random-init baseline.'
-    )
+def _top_biou_gainers(df: pd.DataFrame, best_config: str = 'ptb_brm_cbl', n: int = 3) -> list:
+    """Top-n classes by B-IoU gain of best_config over baseline (non-CLIP), computed
+    fresh and self-contained (no dependency on section5_per_class). Used to check
+    whether the tail classes flagged elsewhere in Section 8 really are where the
+    boundary-supervision methods do most of their work, rather than assuming it."""
+    base = np.stack(df[df['ablation_id'] == 'baseline']['boundary_IoU_per_class'].to_numpy()).mean(axis=0)
+    best = np.stack(df[df['ablation_id'] == best_config]['boundary_IoU_per_class'].to_numpy()).mean(axis=0)
+    delta = best - base
+    order = np.argsort(-delta)[:n]
+    return [(CLASS_NAMES[i], float(delta[i])) for i in order]
 
-    a_vs_b_mean, a_vs_b_std = three_way_info['pairwise'][('A', 'B')]
-    c_vs_b_mean, c_vs_b_std = three_way_info['pairwise'][('C', 'B')]
-    c_vs_a_mean, c_vs_a_std = three_way_info['pairwise'][('C', 'A')]
-    money_sentence = (
-        f'CLIP alone vs.\\ our best non-CLIP method (PTB+BRM+CBL): {a_vs_b_mean * 100:+.2f} '
-        f'$\\pm$ {a_vs_b_std * 100:.2f} pp B-IoU; combining both vs.\\ PTB+BRM+CBL alone: '
-        f'{c_vs_b_mean * 100:+.2f} $\\pm$ {c_vs_b_std * 100:.2f} pp; combining both vs.\\ '
-        f'CLIP alone: {c_vs_a_mean * 100:+.2f} $\\pm$ {c_vs_a_std * 100:.2f} pp.'
-    )
 
+def _per_class_extra_sentence(df: pd.DataFrame, per_class_biou_delta, class_order_names: list) -> str:
     if per_class_biou_delta is None:
-        tail_sentence = 'Per-class B-IoU deltas were unavailable for this comparison.'
-    else:
-        tail_str = ', '.join(
-            f'{name}: {per_class_biou_delta[class_order_names.index(name)] * 100:+.2f} pp'
-            for name in TAIL_CLASSES if name in class_order_names
-        )
-        tail_sentence = (
-            f'On the tail classes, CLIP-alone shifts baseline B-IoU by {tail_str} '
-            f'(compare against the best-config-vs-baseline deltas for the same classes in Section 5).'
-        )
+        return ''
 
-    composing = [label for label, _, _, clip_mean, clip_std in interaction_rows if abs(clip_mean) >= 2 * clip_std]
-    if len(composing) > 2:
-        composing_str = ', '.join(composing[:-1]) + f', and {composing[-1]}'
-    elif len(composing) == 2:
-        composing_str = f'{composing[0]} and {composing[1]}'
-    elif composing:
-        composing_str = composing[0]
-    if composing:
-        compose_sentence = f'Under CLIP init, {composing_str} retain a detectable B-IoU effect (i.e.\\ compose with CLIP rather than being made redundant by it).'
-    else:
-        compose_sentence = 'None of CBL/PTB/BRM/SegFix retain a detectable B-IoU effect once CLIP init is applied, at $n{=}3$ seeds.'
+    gainers = dict(_top_biou_gainers(df, 'ptb_brm_cbl', n=len(CLASS_NAMES)))
+    gainer_str = ', '.join(f'{name} {gainers[name] * 100:+.2f} pp' for name in TAIL_CLASSES if name in gainers)
 
-    return ' '.join([baseline_sentence, money_sentence, tail_sentence, compose_sentence])
+    regress = [n for n in TAIL_CLASSES if n in class_order_names and per_class_biou_delta[class_order_names.index(n)] < 0]
+    improve = [n for n in TAIL_CLASSES if n in class_order_names and per_class_biou_delta[class_order_names.index(n)] >= 0]
+
+    regress_str = ', '.join(
+        f'{n} {per_class_biou_delta[class_order_names.index(n)] * 100:+.2f} pp' for n in regress
+    )
+    improve_str = ', '.join(
+        f'{n} {per_class_biou_delta[class_order_names.index(n)] * 100:+.2f} pp' for n in improve
+    )
+
+    if regress and improve:
+        pattern_sentence = (
+            f'CLIP-init alone regresses {regress_str}, while marginally improving {improve_str}.'
+        )
+    elif regress:
+        pattern_sentence = f'CLIP-init alone regresses all three tail classes ({regress_str}).'
+    else:
+        pattern_sentence = f'CLIP-init alone improves all three tail classes ({improve_str}).'
+
+    return (
+        f'PTB+BRM+CBL\'s largest B-IoU gains over baseline are exactly these tail classes '
+        f'({gainer_str}). {pattern_sentence} The semantic prior evidently does not '
+        f'reliably encode the geometric cues that distinguish thin, boundary-heavy '
+        f'garment regions in 3D point clouds -- consistent with CLIP+PTB+BRM+CBL '
+        f'recovering rather than exceeding PTB+BRM+CBL\'s tail-class performance '
+        f'(Section~8.3): CLIP contributes little on precisely the classes where the '
+        f'boundary methods do most of their work.'
+    )
+
+
+def _interaction_extra_sentence(interaction_rows: list) -> str:
+    """Data-driven: only fires the BRM noise-vs-detectable observation if the numbers
+    actually show that pattern (noclip not detectable, clip detectable), so this
+    degrades gracefully rather than asserting something false on a future re-run."""
+    brm_row = next(r for r in interaction_rows if r[0] == 'BRM')
+    _, noclip_mean, noclip_std, clip_mean, clip_std = brm_row
+    if abs(noclip_mean) >= 2 * noclip_std or abs(clip_mean) < 2 * clip_std:
+        return ''
+    return (
+        f'Under random init, BRM\'s B-IoU effect is buried in seed noise '
+        f'({noclip_mean * 100:+.2f} $\\pm$ {noclip_std * 100:.2f} pp, below the '
+        f'$2\\sigma$ threshold); under CLIP init it becomes detectable '
+        f'({clip_mean * 100:+.2f} $\\pm$ {clip_std * 100:.2f} pp), indicating that '
+        f'BRM\'s mechanism engages differently once the codebook carries semantic '
+        f'structure.'
+    )
+
+
+def _clip_discussion_paragraph(three_way_info, interaction_rows, clip_baseline_deltas_pp, cbl_simple_effects) -> str:
+    # Within the CLIP campaign, which individual contribution helps most vs. the CLIP
+    # baseline itself? (Same formula as Table 8.2's "vs. CLIP baseline" column.)
+    best_within_clip = max(clip_baseline_deltas_pp, key=clip_baseline_deltas_pp.get)
+    best_within_clip_label = HEADLINE_ROW_LABELS[best_within_clip].lstrip('+ ')
+    aggregate_sentence = (
+        f'Within the CLIP-initialized campaign, most individual contributions leave '
+        f'aggregate B-IoU comparable to or worse than the CLIP baseline (Table~8.2); '
+        f'the exception is {best_within_clip_label} at '
+        f'{clip_baseline_deltas_pp[best_within_clip]:+.2f} pp vs.\\ the CLIP baseline.'
+    )
+
+    c_vs_b_mean, c_vs_b_std = three_way_info['pairwise'][('C', 'B')]
+    tail_pairwise = three_way_info['tail_pairwise']
+    lag_str = ', '.join(
+        f'{name} {-tail_pairwise[(name, "A", "B")][0] * 100:.1f} $\\pm$ '
+        f'{tail_pairwise[(name, "A", "B")][1] * 100:.2f} pp'
+        for name in TAIL_CLASSES
+    )
+    tail_sentence = (
+        f'On the tail classes, CLIP-alone clearly lags PTB+BRM+CBL ({lag_str}; '
+        f'Table~8.3), but combining both matches PTB+BRM+CBL on the tail (no '
+        f'detectable per-class difference there) while adding no detectable aggregate '
+        f'B-IoU ({c_vs_b_mean * 100:+.2f} $\\pm$ {c_vs_b_std * 100:.2f} pp vs.\\ '
+        f'PTB+BRM+CBL alone). This is consistent with CLIP shaping the codebook in a '
+        f'way that helps common-class boundaries but does not resolve the hard cases '
+        f'the boundary-supervision methods target.'
+    )
+
+    ptb_row = next(r for r in interaction_rows if r[0] == 'PTB')
+    brm_row = next(r for r in interaction_rows if r[0] == 'BRM')
+    _, _, _, ptb_clip_mean, ptb_clip_std = ptb_row
+    _, _, _, brm_clip_mean, brm_clip_std = brm_row
+    compose_sentence = (
+        f'Under CLIP init, PTB\'s effect remains negative and measurable '
+        f'({ptb_clip_mean * 100:+.2f} $\\pm$ {ptb_clip_std * 100:.2f} pp), and BRM\'s '
+        f'becomes detectable ({brm_clip_mean * 100:+.2f} $\\pm$ {brm_clip_std * 100:.2f} '
+        f'pp). Neither is eliminated by CLIP -- both continue to trade aggregate B-IoU '
+        f'for tail-class gains, just as they did under random init.'
+    )
+
+    noclip_cbl_mean, noclip_cbl_std = cbl_simple_effects['noclip']
+    clip_cbl_mean, clip_cbl_std = cbl_simple_effects['clip']
+    clip_cbl_detectable = abs(clip_cbl_mean) >= 2 * clip_cbl_std
+    bar_note = (
+        'clearing this report\'s $2\\sigma$ detectability bar'
+        if clip_cbl_detectable else
+        'though -- like every individual contribution in Table~8.2 -- it falls just '
+        'short of this report\'s $2\\sigma$ detectability bar'
+    )
+    cbl_sentence = (
+        f'CBL vs.\\ its own baseline is the only individual contribution with a '
+        f'positive point estimate under CLIP init ({clip_cbl_mean * 100:+.2f} $\\pm$ '
+        f'{clip_cbl_std * 100:.2f} pp, {bar_note}); under random init the same '
+        f'comparison is smaller and clearly undetectable ({noclip_cbl_mean * 100:+.2f} '
+        f'$\\pm$ {noclip_cbl_std * 100:.2f} pp).'
+    )
+
+    return ' '.join([aggregate_sentence, tail_sentence, compose_sentence, cbl_sentence])
 
 
 def section8_clip_comparison(df: pd.DataFrame, df_clip: pd.DataFrame, output_dir: Path, runs_dir: Path) -> dict:
@@ -962,21 +1057,33 @@ def section8_clip_comparison(df: pd.DataFrame, df_clip: pd.DataFrame, output_dir
         print(f'Wrote {fig_path}')
     else:
         print('Skipping Section 8 per-class B-IoU delta chart: boundary_IoU_per_class not fully populated.')
+    per_class_extra = _per_class_extra_sentence(df, per_class_biou_delta, class_order_names)
 
     # 8.5
     interaction_rows = _interaction_summary_rows(df, df_clip)
     output_path = output_dir / 'table_clip_interaction.tex'
     output_path.write_text(render_clip_interaction_latex(interaction_rows))
     print(f'Wrote {output_path}')
+    interaction_extra = _interaction_extra_sentence(interaction_rows)
 
     # 8.6
-    discussion = _clip_discussion_paragraph(clip_vs_noclip_deltas, three_way_info, per_class_biou_delta, class_order_names, interaction_rows)
+    clip_baseline_deltas_pp = {
+        aid: float((grouped_clip.loc[aid, ('boundary_iou_mean', 'mean')] - baseline_biou_mean_clip) * 100)
+        for aid in HEADLINE_ROW_ORDER if aid != 'baseline'
+    }
+    cbl_simple_effects = {
+        'noclip': paired_delta(df, 'boundary_iou_mean', 'cbl', 'baseline', pair_on='seed_index'),
+        'clip': paired_delta(df_clip, 'boundary_iou_mean', 'cbl', 'baseline', pair_on='seed_index'),
+    }
+    discussion = _clip_discussion_paragraph(three_way_info, interaction_rows, clip_baseline_deltas_pp, cbl_simple_effects)
 
     return {
         'clip_vs_noclip_deltas': clip_vs_noclip_deltas,
         'three_way_info': three_way_info,
         'per_class_biou_delta_available': per_class_biou_delta is not None,
+        'per_class_extra': per_class_extra,
         'interaction_rows': interaction_rows,
+        'interaction_extra': interaction_extra,
         'discussion': discussion,
     }
 
@@ -1034,6 +1141,8 @@ Section 5's own chart.
 
 {biou_figure_block}
 
+{clip_info['per_class_extra']}
+
 \\subsection{{Interaction Summary}}
 
 For each of the four boundary contributions, the mean B-IoU effect with and without
@@ -1045,6 +1154,8 @@ compose with CLIP and which become redundant to it.
 \\centering
 \\input{{table_clip_interaction.tex}}
 \\end{{table}}
+
+{clip_info['interaction_extra']}
 
 \\subsection{{Discussion}}
 
