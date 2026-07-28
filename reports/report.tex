@@ -23,6 +23,8 @@ headline metric, a $\Delta$ B-IoU vs.\ baseline column is also reported.
 \resizebox{\textwidth}{!}{\input{table_headline.tex}}
 \end{table}
 
+Section~8 extends this analysis to a CLIP-initialized codebook baseline.
+
 \section{CBL $\times$ PTB Factorial}
 
 This is the central scientific claim: does combining CBL and PTB help more, less, or
@@ -136,5 +138,67 @@ move points up and to the left.
 \includegraphics[width=0.75\linewidth]{figures/boundary_inner_scatter.png}
 \caption{mIoU@inner vs.\ mIoU@boundary, one point per (config, seed).}
 \end{figure}
+
+\section{CLIP-Initialized Codebook}
+
+\subsection{Setup}
+
+Instead of a random initialization, the garment codebook's 18 rows are seeded from the
+frozen OpenAI CLIP text encoder's embeddings of each class name (prompt: ``a photo of''
+plus the lowercased class name), projected down to the codebook dimension via a fixed
+random projection, and left trainable during training. This tests whether a semantic
+prior over garment classes is a cheaper or complementary route to the same
+boundary-quality gains as CBL/PTB/BRM/SegFix.
+
+\subsection{Headline Results with Paired Deltas}
+
+Same 10-config table as Section 1, computed on the CLIP-initialized campaign, with an
+extra paired-seed column: the B-IoU delta of each CLIP-initialized config vs.\ its
+non-CLIP counterpart (same architecture, same seed, random codebook init).
+
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{\input{table_clip_headline.tex}}
+\end{table}
+
+\subsection{Does CLIP Alone Match Our Best Method?}
+
+The critical head-to-head: CloSeNet+CLIP vs.\ our best non-CLIP method
+(PTB+BRM+CBL) vs.\ combining both, paired by seed, plus per-class IoU on the tail
+classes (Dress, Jumpsuits, Scarf).
+
+\begin{table}[h]
+\centering
+\input{table_clip_three_way.tex}
+\end{table}
+
+\subsection{Per-Class Delta}
+
+Reproducing Section 5's per-class B-IoU delta chart, but for CLIP-init vs.\
+random-init on the plain baseline (no PTB/BRM/CBL), using the same class ordering
+(sorted by the non-CLIP baseline's mean IoU, descending) for visual comparability with
+Section 5's own chart.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.65\linewidth]{figures/clip_per_class_delta_biou.png}
+\caption{Per-class B-IoU delta: CLIP-init vs.\ random-init codebook (both plain baselines, no PTB/BRM/CBL).}
+\end{figure}
+
+\subsection{Interaction Summary}
+
+For each of the four boundary contributions, the mean B-IoU effect with and without
+CLIP init, using the same effect definitions as Sections 2-4 (main effects /
+postproc-vs-non-postproc deltas), so a reader can see at a glance which contributions
+compose with CLIP and which become redundant to it.
+
+\begin{table}[h]
+\centering
+\input{table_clip_interaction.tex}
+\end{table}
+
+\subsection{Discussion}
+
+CLIP init alone shifts baseline B-IoU by -0.75 $\pm$ 0.68 pp relative to the random-init baseline. CLIP alone vs.\ our best non-CLIP method (PTB+BRM+CBL): +3.44 $\pm$ 0.64 pp B-IoU; combining both vs.\ PTB+BRM+CBL alone: +0.40 $\pm$ 0.28 pp; combining both vs.\ CLIP alone: -3.05 $\pm$ 0.59 pp. On the tail classes, CLIP-alone shifts baseline B-IoU by Dress: +1.16 pp, Jumpsuits: -2.31 pp, Scarf: -1.39 pp (compare against the best-config-vs-baseline deltas for the same classes in Section 5). Under CLIP init, PTB and BRM retain a detectable B-IoU effect (i.e.\ compose with CLIP rather than being made redundant by it).
 
 \end{document}

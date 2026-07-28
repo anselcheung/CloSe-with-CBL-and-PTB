@@ -14,6 +14,10 @@ closenet_train*/
 # corresponding .sbatch script, not meant to be committed.
 logs/
 results/
+results_clip/
+
+# Early debug eval runs, superseded by the full results/results_clip campaigns.
+old_results/
 
 # Seeded, timestamped experiment runs from train_run.sbatch (runs/<experiment_name>/
 # <date_time>/: config.yaml, checkpoints/, summary/, debug.log) - regenerate by

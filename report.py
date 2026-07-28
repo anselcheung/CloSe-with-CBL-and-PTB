@@ -30,6 +30,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 
 # Longest-prefix-first so "ptb_brm_cbl" isn't mis-parsed as "ptb_brm" + leftover.
 ABLATION_PREFIXES = ['ptb_brm_cbl', 'ptb_brm', 'ptb_cbl', 'ptb', 'cbl', 'baseline']
@@ -74,6 +75,10 @@ CLASS_NAMES = [
     'ShortPants', 'Shoes', 'Hoodies', 'Hair', 'Swimwear', 'Underwear', 'Scarf',
     'Jumpsuits', 'Jacket',
 ]
+
+# Section 8: the "tail classes" the CLIP-init narrative (semantically related garments
+# starting closer together in codebook space) is expected to help most.
+TAIL_CLASSES = ['Dress', 'Jumpsuits', 'Scarf']
 
 # Placeholder for a per-class boundary-region metric that evaluate_closenet_ckpts.py
 # doesn't save yet (a follow-up task will add it, likely by exposing the per-class
@@ -650,6 +655,403 @@ def section7_boundary_inner_scatter(df: pd.DataFrame, output_dir: Path):
     print(f'Wrote {fig_path}')
 
 
+# ---------------------------------------------------------------------------
+# Section 8: CLIP-initialized codebook. A self-contained extension that reuses the
+# generic helpers above (paired_delta, _paired_effects, _plot_per_class_delta,
+# compute_headline_stats, _fmt_cell, _fmt_effect, _headline_row_cells) on a second,
+# independently-loaded DataFrame (results_clip/). Sections 1-7's own output files are
+# never re-written by anything below -- section3_brm/section4_segfix are deliberately
+# never called a second time; their underlying comparisons are recomputed standalone.
+# ---------------------------------------------------------------------------
+
+THREE_WAY_LABELS = {
+    'A': 'CloSeNet + CLIP',
+    'B': 'CloSeNet + PTB + BRM + CBL',
+    'C': 'CloSeNet + PTB + BRM + CBL + CLIP',
+}
+
+
+def _assert_seed_alignment(df: pd.DataFrame, df_clip: pd.DataFrame, runs_dir: Path) -> None:
+    """Guards every cross-universe paired comparison in Section 8: that seed_index N
+    means the same literal training seed in df and df_clip. Verifies this directly
+    from each run's saved config.yaml `seed:` field rather than trusting timestamp
+    order alone."""
+    def _seed_of(ablation_id: str, timestamp: str, clip: bool) -> int:
+        training_id = ablation_id[:-len('_postproc')] if ablation_id.endswith('_postproc') else ablation_id
+        suffix = '_clip' if clip else ''
+        config_path = runs_dir / f'{training_id}{suffix}' / timestamp / 'config.yaml'
+        cfg = yaml.safe_load(config_path.read_text())
+        return int(cfg['seed'])
+
+    for ablation_id in HEADLINE_ROW_ORDER:
+        base_rows = df[df['ablation_id'] == ablation_id].sort_values('seed_index')
+        clip_rows = df_clip[df_clip['ablation_id'] == ablation_id].sort_values('seed_index')
+        for (_, base_row), (_, clip_row) in zip(base_rows.iterrows(), clip_rows.iterrows()):
+            base_seed = _seed_of(ablation_id, base_row['timestamp'], clip=False)
+            clip_seed = _seed_of(ablation_id, clip_row['timestamp'], clip=True)
+            if base_seed != clip_seed:
+                raise ValueError(
+                    f'Seed alignment broken for "{ablation_id}" seed_index='
+                    f'{base_row["seed_index"]}: non-CLIP run used seed {base_seed}, '
+                    f'CLIP run used seed {clip_seed}. Every Section 8 cross-universe '
+                    f'comparison assumes matching seed_index -> same literal seed.'
+                )
+
+
+def _clip_vs_noclip_biou_deltas(df: pd.DataFrame, df_clip: pd.DataFrame) -> dict:
+    """Paired-seed (CLIP - non-CLIP) delta in boundary_iou_mean for each of the 10
+    HEADLINE_ROW_ORDER ids. Builds a small, local combined frame (df_clip's
+    ablation_id suffixed '_clip', concatenated with df) purely so paired_delta's pivot
+    never sees a duplicate 'baseline'/'ptb'/... value; this frame is not returned or
+    reused anywhere else."""
+    df_clip_tagged = df_clip.copy()
+    df_clip_tagged['ablation_id'] = df_clip_tagged['ablation_id'] + '_clip'
+    combined = pd.concat([df, df_clip_tagged], ignore_index=True)
+
+    return {
+        ablation_id: paired_delta(combined, 'boundary_iou_mean', f'{ablation_id}_clip', ablation_id, pair_on='seed_index')
+        for ablation_id in HEADLINE_ROW_ORDER
+    }
+
+
+def _clip_headline_row_cells(ablation_id, grouped_clip, best_ablation_clip, baseline_biou_mean_clip, clip_vs_noclip_deltas, pm, bold):
+    cells = _headline_row_cells(ablation_id, grouped_clip, best_ablation_clip, baseline_biou_mean_clip, pm, bold)
+    delta_mean, delta_std = clip_vs_noclip_deltas[ablation_id]
+    cells.append(_fmt_effect(delta_mean, delta_std, pm, 'no detectable effect at $n{=}3$ seeds'))
+    return cells
+
+
+def render_clip_headline_latex(grouped_clip, best_ablation_clip, baseline_biou_mean_clip, clip_vs_noclip_deltas) -> str:
+    lines = ['\\begin{tabular}{l' + 'c' * len(METRIC_KEYS) + 'cc}', '\\toprule']
+    header = (
+        ['Model'] + [METRIC_LABELS[m] for m in METRIC_KEYS]
+        + ['$\\Delta$ B-IoU vs.\\ CLIP baseline', '$\\Delta$ B-IoU vs.\\ non-CLIP']
+    )
+    lines.append(' & '.join(header) + ' \\\\')
+    lines.append('\\midrule')
+    for ablation_id in HEADLINE_ROW_ORDER:
+        cells = _clip_headline_row_cells(
+            ablation_id, grouped_clip, best_ablation_clip, baseline_biou_mean_clip,
+            clip_vs_noclip_deltas, pm='$\\pm$', bold=lambda c: f'\\textbf{{{c}}}',
+        )
+        lines.append(' & '.join(cells) + ' \\\\')
+    lines.append('\\bottomrule')
+    lines.append('\\end{tabular}')
+    return '\n'.join(lines) + '\n'
+
+
+def _three_way_frame(df: pd.DataFrame, df_clip: pd.DataFrame) -> pd.DataFrame:
+    """9-row frame (3 groups x 3 seeds) with generic A/B/C labels so paired_delta can
+    run directly: A = CloSeNet+CLIP, B = our best method without CLIP
+    (PTB+BRM+CBL), C = our best method with CLIP."""
+    a = df_clip[df_clip['ablation_id'] == 'baseline'].assign(ablation_id='A')
+    b = df[df['ablation_id'] == 'ptb_brm_cbl'].assign(ablation_id='B')
+    c = df_clip[df_clip['ablation_id'] == 'ptb_brm_cbl'].assign(ablation_id='C')
+    return pd.concat([a, b, c], ignore_index=True)
+
+
+def section8_3_three_way(df: pd.DataFrame, df_clip: pd.DataFrame) -> dict:
+    frame = _three_way_frame(df, df_clip)
+
+    biou_stats = frame.groupby('ablation_id')['boundary_iou_mean'].agg(['mean', 'std'])
+
+    pairwise = {
+        (a, b): paired_delta(frame, 'boundary_iou_mean', a, b, pair_on='seed_index')
+        for a, b in [('C', 'A'), ('C', 'B'), ('A', 'B')]
+    }
+
+    # Per-class *regular* IoU (not B-IoU) for the tail classes, computed fresh from
+    # each group's raw IoU_per_class -- not df's section5-mutated class_<name>
+    # columns, so this has no ordering dependency on section5_per_class having run.
+    tail_indices = [CLASS_NAMES.index(name) for name in TAIL_CLASSES]
+    tail_stats = {}
+    for group in ['A', 'B', 'C']:
+        per_class = np.stack(frame[frame['ablation_id'] == group]['IoU_per_class'].to_numpy())
+        tail_stats[group] = {
+            name: (float(per_class[:, idx].mean()), float(per_class[:, idx].std(ddof=1)))
+            for name, idx in zip(TAIL_CLASSES, tail_indices)
+        }
+
+    return {'biou_stats': biou_stats, 'pairwise': pairwise, 'tail_stats': tail_stats}
+
+
+def render_clip_three_way_latex(three_way_info: dict) -> str:
+    biou_stats = three_way_info['biou_stats']
+    pairwise = three_way_info['pairwise']
+    tail_stats = three_way_info['tail_stats']
+
+    lines = ['\\begin{tabular}{lc}', '\\toprule', 'Config & B-IoU \\\\', '\\midrule']
+    for group in ['A', 'B', 'C']:
+        mean, std = biou_stats.loc[group, 'mean'], biou_stats.loc[group, 'std']
+        cell = _fmt_cell(mean, std, 'boundary_iou_mean', '$\\pm$')
+        lines.append(f'{THREE_WAY_LABELS[group]} & {cell} \\\\')
+    lines.append('\\midrule')
+    for (a, b), (mean, std) in pairwise.items():
+        label = f'{THREE_WAY_LABELS[a]} vs.\\ {THREE_WAY_LABELS[b]}'
+        cell = _fmt_effect(mean, std, '$\\pm$', 'no detectable effect at $n{=}3$ seeds')
+        lines.append(f'{label} & {cell} \\\\')
+    lines.append('\\bottomrule')
+    lines.append('\\end{tabular}')
+
+    tail_lines = ['\\begin{tabular}{l' + 'c' * len(TAIL_CLASSES) + '}', '\\toprule']
+    tail_lines.append('Config & ' + ' & '.join(TAIL_CLASSES) + ' \\\\')
+    tail_lines.append('\\midrule')
+    for group in ['A', 'B', 'C']:
+        cells = [THREE_WAY_LABELS[group]]
+        for name in TAIL_CLASSES:
+            mean, std = tail_stats[group][name]
+            cells.append(f'{mean * 100:.2f} $\\pm$ {std * 100:.2f}')
+        tail_lines.append(' & '.join(cells) + ' \\\\')
+    tail_lines.append('\\bottomrule')
+    tail_lines.append('\\end{tabular}')
+
+    return '\n'.join(lines) + '\n\n' + '\n'.join(tail_lines) + '\n'
+
+
+def _class_order_from_baseline(df: pd.DataFrame) -> list:
+    """Same descending-baseline-mean-IoU class order Section 5 uses, computed fresh
+    from df's raw IoU_per_class (not df's section5-mutated class_<name> columns) so
+    this has no hidden run-order dependency on section5_per_class."""
+    baseline_rows = df[df['ablation_id'] == 'baseline']
+    per_class = np.stack(baseline_rows['IoU_per_class'].to_numpy())
+    order = np.argsort(-per_class.mean(axis=0))
+    return [CLASS_NAMES[i] for i in order]
+
+
+def _clip_baseline_biou_per_class_delta(df: pd.DataFrame, df_clip: pd.DataFrame, class_order_names: list):
+    """mean(df_clip baseline biou per class) - mean(df baseline biou per class),
+    reordered into class_order_names. Returns None if either side's
+    boundary_IoU_per_class isn't fully populated (mirrors section5_per_class's
+    biou_available gate)."""
+    if not df['boundary_IoU_per_class'].notna().all() or not df_clip['boundary_IoU_per_class'].notna().all():
+        return None
+
+    def _mean_per_class(frame: pd.DataFrame) -> np.ndarray:
+        rows = frame[frame['ablation_id'] == 'baseline']
+        return np.stack(rows['boundary_IoU_per_class'].to_numpy()).mean(axis=0)
+
+    base_means = _mean_per_class(df)
+    clip_means = _mean_per_class(df_clip)
+    name_to_index = {name: i for i, name in enumerate(CLASS_NAMES)}
+    return np.array([clip_means[name_to_index[n]] - base_means[name_to_index[n]] for n in class_order_names])
+
+
+def _brm_main_effect(df: pd.DataFrame, metric: str = 'boundary_iou_mean'):
+    """0.5*((ptb_brm - ptb) + (ptb_brm_cbl - ptb_cbl)) per seed -- BRM's main effect,
+    mirroring _paired_effects's averaging pattern. Does not call section3_brm (which
+    would overwrite table_brm_pairwise.tex)."""
+    pivot = df[df['ablation_id'].isin(PTB_FAMILY_CELLS)].pivot(index='seed_index', columns='ablation_id', values=metric)
+    effect_per_seed = 0.5 * ((pivot['ptb_brm'] - pivot['ptb']) + (pivot['ptb_brm_cbl'] - pivot['ptb_cbl']))
+    return float(effect_per_seed.mean()), float(effect_per_seed.std(ddof=1))
+
+
+def _segfix_overall_effect(df: pd.DataFrame, metric: str = 'boundary_iou_mean'):
+    """Pools the postproc-vs-non-postproc diff (paired by timestamp) across all 4
+    PTB_FAMILY_CELLS into one mean/std, mirroring section4_segfix's per-config deltas.
+    Does not call section4_segfix (which would overwrite table_segfix_effect.tex)."""
+    diffs = []
+    for config in PTB_FAMILY_CELLS:
+        pivot = df[df['ablation_id'].isin([f'{config}_postproc', config])].pivot(index='timestamp', columns='ablation_id', values=metric)
+        diffs.append(pivot[f'{config}_postproc'] - pivot[config])
+    pooled = pd.concat(diffs, ignore_index=True)
+    return float(pooled.mean()), float(pooled.std(ddof=1))
+
+
+def _interaction_summary_rows(df: pd.DataFrame, df_clip: pd.DataFrame) -> list:
+    noclip_cbl = _paired_effects(df, 'boundary_iou_mean')['CBL main effect']
+    clip_cbl = _paired_effects(df_clip, 'boundary_iou_mean')['CBL main effect']
+    noclip_ptb = _paired_effects(df, 'boundary_iou_mean')['PTB main effect']
+    clip_ptb = _paired_effects(df_clip, 'boundary_iou_mean')['PTB main effect']
+    noclip_brm = _brm_main_effect(df)
+    clip_brm = _brm_main_effect(df_clip)
+    noclip_segfix = _segfix_overall_effect(df)
+    clip_segfix = _segfix_overall_effect(df_clip)
+
+    return [
+        ('CBL', *noclip_cbl, *clip_cbl),
+        ('PTB', *noclip_ptb, *clip_ptb),
+        ('BRM', *noclip_brm, *clip_brm),
+        ('SegFix', *noclip_segfix, *clip_segfix),
+    ]
+
+
+def render_clip_interaction_latex(rows: list) -> str:
+    lines = ['\\begin{tabular}{lcc}', '\\toprule', 'Contribution & Without CLIP & With CLIP \\\\', '\\midrule']
+    for label, noclip_mean, noclip_std, clip_mean, clip_std in rows:
+        noclip_cell = _fmt_effect(noclip_mean, noclip_std, '$\\pm$', 'no detectable effect at $n{=}3$ seeds')
+        clip_cell = _fmt_effect(clip_mean, clip_std, '$\\pm$', 'no detectable effect at $n{=}3$ seeds')
+        lines.append(f'{label} & {noclip_cell} & {clip_cell} \\\\')
+    lines.append('\\bottomrule')
+    lines.append('\\end{tabular}')
+    return '\n'.join(lines) + '\n'
+
+
+def _clip_discussion_paragraph(clip_vs_noclip_deltas, three_way_info, per_class_biou_delta, class_order_names, interaction_rows) -> str:
+    baseline_mean, baseline_std = clip_vs_noclip_deltas['baseline']
+    baseline_sentence = (
+        f'CLIP init alone shifts baseline B-IoU by {baseline_mean * 100:+.2f} $\\pm$ '
+        f'{baseline_std * 100:.2f} pp relative to the random-init baseline.'
+    )
+
+    a_vs_b_mean, a_vs_b_std = three_way_info['pairwise'][('A', 'B')]
+    c_vs_b_mean, c_vs_b_std = three_way_info['pairwise'][('C', 'B')]
+    c_vs_a_mean, c_vs_a_std = three_way_info['pairwise'][('C', 'A')]
+    money_sentence = (
+        f'CLIP alone vs.\\ our best non-CLIP method (PTB+BRM+CBL): {a_vs_b_mean * 100:+.2f} '
+        f'$\\pm$ {a_vs_b_std * 100:.2f} pp B-IoU; combining both vs.\\ PTB+BRM+CBL alone: '
+        f'{c_vs_b_mean * 100:+.2f} $\\pm$ {c_vs_b_std * 100:.2f} pp; combining both vs.\\ '
+        f'CLIP alone: {c_vs_a_mean * 100:+.2f} $\\pm$ {c_vs_a_std * 100:.2f} pp.'
+    )
+
+    if per_class_biou_delta is None:
+        tail_sentence = 'Per-class B-IoU deltas were unavailable for this comparison.'
+    else:
+        tail_str = ', '.join(
+            f'{name}: {per_class_biou_delta[class_order_names.index(name)] * 100:+.2f} pp'
+            for name in TAIL_CLASSES if name in class_order_names
+        )
+        tail_sentence = (
+            f'On the tail classes, CLIP-alone shifts baseline B-IoU by {tail_str} '
+            f'(compare against the best-config-vs-baseline deltas for the same classes in Section 5).'
+        )
+
+    composing = [label for label, _, _, clip_mean, clip_std in interaction_rows if abs(clip_mean) >= 2 * clip_std]
+    if len(composing) > 2:
+        composing_str = ', '.join(composing[:-1]) + f', and {composing[-1]}'
+    elif len(composing) == 2:
+        composing_str = f'{composing[0]} and {composing[1]}'
+    elif composing:
+        composing_str = composing[0]
+    if composing:
+        compose_sentence = f'Under CLIP init, {composing_str} retain a detectable B-IoU effect (i.e.\\ compose with CLIP rather than being made redundant by it).'
+    else:
+        compose_sentence = 'None of CBL/PTB/BRM/SegFix retain a detectable B-IoU effect once CLIP init is applied, at $n{=}3$ seeds.'
+
+    return ' '.join([baseline_sentence, money_sentence, tail_sentence, compose_sentence])
+
+
+def section8_clip_comparison(df: pd.DataFrame, df_clip: pd.DataFrame, output_dir: Path, runs_dir: Path) -> dict:
+    _assert_seed_alignment(df, df_clip, runs_dir)
+
+    figures_dir = output_dir / 'figures'
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # 8.2
+    grouped_clip, best_ablation_clip, baseline_biou_mean_clip = compute_headline_stats(df_clip)
+    clip_vs_noclip_deltas = _clip_vs_noclip_biou_deltas(df, df_clip)
+    output_path = output_dir / 'table_clip_headline.tex'
+    output_path.write_text(render_clip_headline_latex(grouped_clip, best_ablation_clip, baseline_biou_mean_clip, clip_vs_noclip_deltas))
+    print(f'Wrote {output_path}')
+
+    # 8.3
+    three_way_info = section8_3_three_way(df, df_clip)
+    output_path = output_dir / 'table_clip_three_way.tex'
+    output_path.write_text(render_clip_three_way_latex(three_way_info))
+    print(f'Wrote {output_path}')
+
+    # 8.4
+    class_order_names = _class_order_from_baseline(df)
+    per_class_biou_delta = _clip_baseline_biou_per_class_delta(df, df_clip, class_order_names)
+    if per_class_biou_delta is not None:
+        fig_path = figures_dir / 'clip_per_class_delta_biou.png'
+        _plot_per_class_delta(
+            per_class_biou_delta, class_order_names, fig_path,
+            xlabel='CloSeNet+CLIP $-$ CloSeNet (B-IoU)',
+            title='Per-class B-IoU delta: CLIP-init vs.\\ random-init codebook',
+        )
+        print(f'Wrote {fig_path}')
+    else:
+        print('Skipping Section 8 per-class B-IoU delta chart: boundary_IoU_per_class not fully populated.')
+
+    # 8.5
+    interaction_rows = _interaction_summary_rows(df, df_clip)
+    output_path = output_dir / 'table_clip_interaction.tex'
+    output_path.write_text(render_clip_interaction_latex(interaction_rows))
+    print(f'Wrote {output_path}')
+
+    # 8.6
+    discussion = _clip_discussion_paragraph(clip_vs_noclip_deltas, three_way_info, per_class_biou_delta, class_order_names, interaction_rows)
+
+    return {
+        'clip_vs_noclip_deltas': clip_vs_noclip_deltas,
+        'three_way_info': three_way_info,
+        'per_class_biou_delta_available': per_class_biou_delta is not None,
+        'interaction_rows': interaction_rows,
+        'discussion': discussion,
+    }
+
+
+def render_section8(clip_info: dict) -> str:
+    biou_figure_block = (
+        """\\begin{figure}[h]
+\\centering
+\\includegraphics[width=0.65\\linewidth]{figures/clip_per_class_delta_biou.png}
+\\caption{Per-class B-IoU delta: CLIP-init vs.\\ random-init codebook (both plain baselines, no PTB/BRM/CBL).}
+\\end{figure}"""
+        if clip_info['per_class_biou_delta_available'] else ''
+    )
+
+    return f"""
+\\section{{CLIP-Initialized Codebook}}
+
+\\subsection{{Setup}}
+
+Instead of a random initialization, the garment codebook's 18 rows are seeded from the
+frozen OpenAI CLIP text encoder's embeddings of each class name (prompt: ``a photo of''
+plus the lowercased class name), projected down to the codebook dimension via a fixed
+random projection, and left trainable during training. This tests whether a semantic
+prior over garment classes is a cheaper or complementary route to the same
+boundary-quality gains as CBL/PTB/BRM/SegFix.
+
+\\subsection{{Headline Results with Paired Deltas}}
+
+Same 10-config table as Section 1, computed on the CLIP-initialized campaign, with an
+extra paired-seed column: the B-IoU delta of each CLIP-initialized config vs.\\ its
+non-CLIP counterpart (same architecture, same seed, random codebook init).
+
+\\begin{{table}}[h]
+\\centering
+\\resizebox{{\\textwidth}}{{!}}{{\\input{{table_clip_headline.tex}}}}
+\\end{{table}}
+
+\\subsection{{Does CLIP Alone Match Our Best Method?}}
+
+The critical head-to-head: CloSeNet+CLIP vs.\\ our best non-CLIP method
+(PTB+BRM+CBL) vs.\\ combining both, paired by seed, plus per-class IoU on the tail
+classes (Dress, Jumpsuits, Scarf).
+
+\\begin{{table}}[h]
+\\centering
+\\input{{table_clip_three_way.tex}}
+\\end{{table}}
+
+\\subsection{{Per-Class Delta}}
+
+Reproducing Section 5's per-class B-IoU delta chart, but for CLIP-init vs.\\
+random-init on the plain baseline (no PTB/BRM/CBL), using the same class ordering
+(sorted by the non-CLIP baseline's mean IoU, descending) for visual comparability with
+Section 5's own chart.
+
+{biou_figure_block}
+
+\\subsection{{Interaction Summary}}
+
+For each of the four boundary contributions, the mean B-IoU effect with and without
+CLIP init, using the same effect definitions as Sections 2-4 (main effects /
+postproc-vs-non-postproc deltas), so a reader can see at a glance which contributions
+compose with CLIP and which become redundant to it.
+
+\\begin{{table}}[h]
+\\centering
+\\input{{table_clip_interaction.tex}}
+\\end{{table}}
+
+\\subsection{{Discussion}}
+
+{clip_info['discussion']}
+"""
+
+
 REPORT_TEX_TEMPLATE = """\\documentclass[11pt]{article}
 \\usepackage[margin=1in]{geometry}
 \\usepackage{booktabs}
@@ -674,6 +1076,8 @@ headline metric, a $\\Delta$ B-IoU vs.\\ baseline column is also reported.
 \\centering
 \\resizebox{\\textwidth}{!}{\\input{table_headline.tex}}
 \\end{table}
+
+Section~8 extends this analysis to a CLIP-initialized codebook baseline.
 
 \\section{CBL $\\times$ PTB Factorial}
 
@@ -869,12 +1273,17 @@ move points up and to the left.
 """
 
 
-def write_latex_report(output_dir: Path, brm_rows, segfix_deltas, per_class_info, training_info) -> None:
+def write_latex_report(output_dir: Path, brm_rows, segfix_deltas, per_class_info, training_info, clip_info) -> None:
     # table_*.tex / figures/*.png are \\input / \\includegraphics'd rather than
     # re-rendered here, so this file always matches what each sectionN_xxx wrote.
     # Only the prose (worse classes, trend directions, flagged configs) is computed
     # here from each section's return value, so it always reflects the actual numbers.
-    content = REPORT_TEX_TEMPLATE + render_dynamic_sections(brm_rows, segfix_deltas, per_class_info, training_info) + REPORT_TEX_FOOTER
+    content = (
+        REPORT_TEX_TEMPLATE
+        + render_dynamic_sections(brm_rows, segfix_deltas, per_class_info, training_info)
+        + render_section8(clip_info)
+        + REPORT_TEX_FOOTER
+    )
     output_path = output_dir / 'report.tex'
     output_path.write_text(content)
     print(f'Wrote {output_path}')
@@ -883,11 +1292,13 @@ def write_latex_report(output_dir: Path, brm_rows, segfix_deltas, per_class_info
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--results-dir', default='results')
+    parser.add_argument('--results-clip-dir', default='results_clip')
     parser.add_argument('--runs-dir', default='runs')
     parser.add_argument('--output-dir', default='reports')
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
+    results_clip_dir = Path(args.results_clip_dir)
     runs_dir = Path(args.runs_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -900,7 +1311,9 @@ def main() -> None:
     per_class_info = section5_per_class(df, output_dir, best_ablation)
     training_info = section6_training_dynamics(df, runs_dir, output_dir)
     section7_boundary_inner_scatter(df, output_dir)
-    write_latex_report(output_dir, brm_rows, segfix_deltas, per_class_info, training_info)
+    df_clip = load_results(results_clip_dir)
+    clip_info = section8_clip_comparison(df, df_clip, output_dir, runs_dir)
+    write_latex_report(output_dir, brm_rows, segfix_deltas, per_class_info, training_info, clip_info)
 
 
 if __name__ == '__main__':
