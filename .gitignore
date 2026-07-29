@@ -194,3 +194,14 @@ cython_debug/
 #.idea/
 
 .vscode
+
+# LaTeX build artifacts (reports/report.tex is compiled locally with latexmk/pdflatex)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+
