@@ -90,7 +90,7 @@ itself is already boundary-aware? Going from PTB to PTB+BRM+CBL, the SegFix B-Io
 
 \section{Per-Class Breakdown}
 
-Classes that regress under + PTB + BRM + CBL: Jacket, Hat, Hoodies, Vest, Skirt, TShirt, Hair, Body. Correlation between a class's baseline mean IoU and its baseline seed-to-seed std is -0.67 (lower-IoU classes do show higher seed variance). Classes that regress on B-IoU: Jacket, Hat, Hoodies, Vest, Skirt, TShirt, Hair, Body.
+Classes that regress under + CBL: Vest, Skirt, Shirt, Coat, Pants, Shoes, Hair, Scarf. Correlation between a class's baseline mean IoU and its baseline seed-to-seed std is -0.76 (lower-IoU classes do show higher seed variance). Classes that regress on B-IoU: Vest, Skirt, Shirt, Coat, Pants, Shoes, Hair, Scarf.
 
 \begin{figure}[h]
 \centering
@@ -185,7 +185,7 @@ Section 5's own chart.
 \caption{Per-class B-IoU delta: CLIP-init vs.\ random-init codebook (both plain baselines, no PTB/BRM/CBL).}
 \end{figure}
 
-PTB+BRM+CBL's largest B-IoU gains over baseline are exactly these tail classes (Dress +11.34 pp, Jumpsuits +9.70 pp, Scarf +11.64 pp). CLIP-init alone regresses Jumpsuits -2.31 pp, Scarf -1.39 pp, while marginally improving Dress +1.16 pp. The semantic prior evidently does not reliably encode the geometric cues that distinguish thin, boundary-heavy garment regions in 3D point clouds -- consistent with CLIP+PTB+BRM+CBL recovering rather than exceeding PTB+BRM+CBL's tail-class performance (Section~8.3): CLIP contributes little on precisely the classes where the boundary methods do most of their work.
+PTB+BRM+CBL's largest B-IoU gains over baseline are exactly these tail classes (Dress +1.70 pp, Jumpsuits +1.70 pp, Scarf -0.17 pp). CLIP-init alone regresses Scarf -0.51 pp, while marginally improving Dress +0.68 pp, Jumpsuits +0.51 pp. The semantic prior evidently does not reliably encode the geometric cues that distinguish thin, boundary-heavy garment regions in 3D point clouds -- consistent with CLIP+PTB+BRM+CBL recovering rather than exceeding PTB+BRM+CBL's tail-class performance (Section~8.3): CLIP contributes little on precisely the classes where the boundary methods do most of their work.
 
 \subsection{Interaction Summary}
 
@@ -203,6 +203,6 @@ Under random init, BRM's B-IoU effect is buried in seed noise (-0.44 $\pm$ 0.45 
 
 \subsection{Discussion}
 
-Within the CLIP-initialized campaign, most individual contributions leave aggregate B-IoU comparable to or worse than the CLIP baseline (Table~8.2); the exception is CBL at +1.15 pp vs.\ the CLIP baseline. On the tail classes, CLIP-alone clearly lags PTB+BRM+CBL (Dress 10.2 $\pm$ 1.38 pp, Jumpsuits 12.0 $\pm$ 2.34 pp, Scarf 13.0 $\pm$ 0.26 pp; Table~8.3), but combining both matches PTB+BRM+CBL on the tail (no detectable per-class difference there) while adding no detectable aggregate B-IoU (+0.40 $\pm$ 0.28 pp vs.\ PTB+BRM+CBL alone). This is consistent with CLIP shaping the codebook in a way that helps common-class boundaries but does not resolve the hard cases the boundary-supervision methods target. Under CLIP init, PTB's effect remains negative and measurable (-3.23 $\pm$ 0.42 pp), and BRM's becomes detectable (-0.36 $\pm$ 0.14 pp). Neither is eliminated by CLIP -- both continue to trade aggregate B-IoU for tail-class gains, just as they did under random init. CBL vs.\ its own baseline is the only individual contribution with a positive point estimate under CLIP init (+1.15 $\pm$ 0.65 pp, though -- like every individual contribution in Table~8.2 -- it falls just short of this report's $2\sigma$ detectability bar); under random init the same comparison is smaller and clearly undetectable (-0.53 $\pm$ 0.37 pp).
+Within the CLIP-initialized campaign, most individual contributions leave aggregate B-IoU comparable to or worse than the CLIP baseline (Table~8.2); the exception is PTB at +0.82 pp vs.\ the CLIP baseline. On the tail classes, CLIP-alone clearly lags PTB+BRM+CBL (Dress 1.0 $\pm$ 1.35 pp, Jumpsuits 1.2 $\pm$ 2.12 pp, Scarf 0.3 $\pm$ 1.06 pp; Table~8.3), but combining both matches PTB+BRM+CBL on the tail (no detectable per-class difference there) while adding no detectable aggregate B-IoU (+0.40 $\pm$ 0.28 pp vs.\ PTB+BRM+CBL alone). This is consistent with CLIP shaping the codebook in a way that helps common-class boundaries but does not resolve the hard cases the boundary-supervision methods target. Under CLIP init, PTB's effect remains negative and measurable (+0.20 $\pm$ 0.49 pp), and BRM's becomes detectable (-0.36 $\pm$ 0.14 pp). Neither is eliminated by CLIP -- both continue to trade aggregate B-IoU for tail-class gains, just as they did under random init. CBL vs.\ its own baseline is the only individual contribution with a positive point estimate under CLIP init (+0.74 $\pm$ 0.70 pp, though -- like every individual contribution in Table~8.2 -- it falls just short of this report's $2\sigma$ detectability bar); under random init the same comparison is smaller and clearly undetectable (-0.44 $\pm$ 0.91 pp).
 
 \end{document}
