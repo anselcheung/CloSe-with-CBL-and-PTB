@@ -4,6 +4,9 @@
 
 \documentclass{article}
 
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
 % Recommended, but optional, packages for figures and better typesetting:
 \usepackage{microtype}
 \usepackage{graphicx}
@@ -24,6 +27,9 @@
 
 % If accepted, instead use the following line for the camera-ready submission:
 \usepackage[accepted]{icml2025}
+\makeatletter
+\renewcommand{\Notice@String}{}
+\makeatother
 
 % For theorems and such
 \usepackage{amsmath}
@@ -55,7 +61,7 @@
 
 % The \icmltitle you define below is probably too long as a header.
 % Therefore, a short form for the running title is supplied here:
-\icmltitlerunning{Submission and Formatting Instructions for ICML 2025}
+\icmltitlerunning{Enhancing Boundary Precision in 3D Clothing Segmentation}
 
 \begin{document}
 
@@ -78,26 +84,14 @@
 \icmlsetsymbol{equal}{*}
 
 \begin{icmlauthorlist}
-\icmlauthor{Firstname1 Lastname1}{equal,yyy}
-\icmlauthor{Firstname2 Lastname2}{equal,yyy,comp}
-\icmlauthor{Firstname3 Lastname3}{comp}
-\icmlauthor{Firstname4 Lastname4}{sch}
-\icmlauthor{Firstname5 Lastname5}{yyy}
-\icmlauthor{Firstname6 Lastname6}{sch,yyy,comp}
-\icmlauthor{Firstname7 Lastname7}{comp}
-%\icmlauthor{}{sch}
-\icmlauthor{Firstname8 Lastname8}{sch}
-\icmlauthor{Firstname8 Lastname8}{yyy,comp}
-%\icmlauthor{}{sch}
-%\icmlauthor{}{sch}
+\icmlauthor{Rishab Pradeep Mudliar}{equal,yyy}
+\icmlauthor{Ansel Cheung Heng Yu}{equal,yyy}
 \end{icmlauthorlist}
 
-\icmlaffiliation{yyy}{Department of XXX, University of YYY, Location, Country}
-\icmlaffiliation{comp}{Company Name, Location, Country}
-\icmlaffiliation{sch}{School of ZZZ, Institute of WWW, Location, Country}
+\icmlaffiliation{yyy}{Universität Tübingen, Germany}
 
-\icmlcorrespondingauthor{Firstname1 Lastname1}{first1.last1@xxx.edu}
-\icmlcorrespondingauthor{Firstname2 Lastname2}{first2.last2@www.uk}
+\icmlcorrespondingauthor{Rishab Pradeep Mudliar}{rishab-pradeep.mudliar@student.uni-tuebingen.de}
+\icmlcorrespondingauthor{Ansel Cheung Heng Yu}{ansel-heng-yu.cheung@student.uni-tuebingen.de}
 
 % You may provide any keywords that you
 % find helpful for describing your paper; these are used to populate
@@ -119,7 +113,7 @@
 \printAffiliationsAndNotice{\icmlEqualContribution} % otherwise use the standard text.
 
 \begin{abstract}
-Semantic segmentation of 3D point clouds is a fundamental task in computer vision that benefits from directly exploiting geometric information to produce view-consistent point-wise predictions. However, many point cloud segmentation networks struggle to accurately delineate object boundaries, reducing segmentation quality around object edges. Recent methods such as Push-the-Boundary (PTB) and Contrastive Boundary Learning (CBL) address this through boundary-aware supervised learning and feature propagation. In this work, we integrate PTB, CBL, and a boundary-aware refinement module into CloSe-Net, and further adapt a SegFix-inspired post-processing strategy from image segmentation to the 3D point cloud domain. We ablate all component combinations on CloSe-D and Thuman2.0 over three seeds, using boundary- and region-level metrics, to assess how well existing boundary refinement strategies transfer to CloSe-Net.
+Semantic segmentation of 3D point clouds is a fundamental task in computer vision that benefits from directly exploiting geometric information to produce view-consistent point-wise predictions. However, many point cloud segmentation networks struggle to accurately delineate object boundaries, reducing segmentation quality around object edges. Recent methods such as Push-the-Boundary (PTB) and Contrastive Boundary Learning (CBL) address this through boundary-aware supervised learning and feature propagation. In this work, we integrate PTB, CBL, and a boundary-aware refinement module into CloSe-Net, and further adapt a SegFix-inspired post-processing strategy from image segmentation to the 3D point cloud domain. We ablate all component combinations on CloSe-Di augmented with THuman2.0 over three seeds, using boundary- and region-level metrics, to assess how well existing boundary refinement strategies transfer to CloSe-Net.
 
 Across 60 trained models (10 configurations $\times$ 3 seeds $\times$ 2
 codebook-init regimes), no configuration detectably improves aggregate B-IoU
@@ -128,8 +122,8 @@ in the entire campaign. The signal these methods do produce is not invisible,
 just not where the aggregate metric looks -- it shows up per class (largest
 on Dress and Jumpsuits under PTB+BRM+CBL, though within seed spread for at
 least one of them) and in a narrow, specific CLIP interaction (CLIP-init
-detectably damages the plain baseline's B-IoU and freq\_IoU, and our methods
-neutralise but do not reverse that damage). We report all of this, including
+detectably reduces the plain baseline's B-IoU and freq\_IoU, and our methods
+offset but do not reverse that reduction). We report all of this, including
 the null results, at the same statistical standard throughout.
 \end{abstract}
 
@@ -141,9 +135,9 @@ predictions grounded directly in geometry, avoiding the multi-view
 inconsistency of image-based approaches. Its persistent weakness is boundary
 quality: local neighbourhood operations aggregate features from both sides of
 a class transition, so representations blur exactly where class identity
-changes. The effect is measurable on S3DIS~\cite{https://doi.org/10.57761/gk3g-wc33},
+changes. The effect is measurable on S3DIS~\cite{armeni20163d},
 where accuracy restricted to boundary regions lags interior accuracy by around
-twenty mIoU points~\cite{tang2022contrastive}, and it is disproportionately
+twenty mIoU points~\cite{tang2022contrastive} (Table~1, S3DIS Area 5), and it is disproportionately
 costly for 3D clothing segmentation, where garment labels are defined almost
 entirely by their extents: where a sleeve ends and the arm begins, where a hem
 separates a shirt from trousers. Interior points are rarely ambiguous, so
@@ -157,7 +151,7 @@ point encoder, a canonical-pose body prior derived from a fitted
 SMPL~\cite{SMPL:2015} body, and a learnable garment codebook attended over by
 a cross-attention module, into a pointwise MLP decoder (\cref{sec:methodology}
 gives the full architecture). It attains strong region-level accuracy on
-CloSe-D, but on out-of-distribution scans such as THuman2.0~\cite{tao2021function4d}
+CloSe-Di, but on out-of-distribution scans such as THuman2.0~\cite{tao2021function4d}
 the original authors report blurry boundaries, addressed through interactive
 annotation and continual fine-tuning rather than through the model itself.
 This leaves open whether an architectural boundary mechanism could serve the
@@ -167,9 +161,9 @@ complementary one. Several boundary mechanisms have been proposed for point
 clouds generally, and a semantic prior is available off-the-shelf: this paper
 adapts both to CloSe-Net and asks how well each transfers.
 
-Push-the-Boundary (PTB)~\cite{Du_2022} adds auxiliary boundary-classification
-and interior-direction streams, then fuses both to guide feature propagation
-during decoder upsampling. Contrastive Boundary Learning
+Push-the-Boundary (PTB)~\cite{Du_2022} adds an auxiliary boundary-classification
+head and a per-point interior-direction regression head, then fuses both to guide
+feature propagation during decoder upsampling. Contrastive Boundary Learning
 (CBL)~\cite{tang2022contrastive} applies an InfoNCE objective at boundary
 points to separate differing-class neighbours in feature space, at every
 sub-sampling stage of the backbone. SegFix~\cite{yuan2020segfixmodelagnosticboundaryrefinement}
@@ -184,17 +178,17 @@ automatic. The first is geometric: in generic scenes, class boundaries tend to
 coincide with structure, whereas a hem lies flush against the torso and a cuff
 against an arm -- the class changes while the surface stays smooth. Methods
 that localise boundaries from geometric cues may therefore have less signal to
-exploit; Du et al.\ attribute PTB's largest per-class regression to a category
-with geometrically irregular boundaries, pointing to noisy boundary and
-direction estimates as the cause.
+exploit; Du et al.\ attribute PTB's largest per-class regression -- the water
+class on SensatUrban -- to geometrically irregular boundaries, pointing to
+noisy boundary and direction estimates as the cause.
 
 The second difference is architectural, and it is the one we focus on. Both
 PTB and CBL are formulated for backbones with a sub-sampling hierarchy. PTB's
 guided propagation reweights the interpolation performed when upsampling
 features, steering an aggregation that already exists and that PTB identifies
-as a source of lost boundary detail; CBL's own ablation attributes most of its
-improvement to applying the contrastive objective across sub-sampling stages
-rather than at the input scale alone. CloSe-Net provides neither: its DGCNN
+as a source of lost boundary detail; CBL's own ablation (Table~7) attributes
+most of its improvement to applying the contrastive objective across
+sub-sampling stages rather than at the input scale alone. CloSe-Net provides neither: its DGCNN
 encoder runs at full point resolution and its MLP decoder performs no
 neighbourhood aggregation at all. Porting PTB therefore requires re-homing its
 guided-propagation mechanism rather than transplanting it directly -- there is
@@ -219,7 +213,7 @@ Refinement Module (BRM) that re-homes PTB's guided-propagation weighting onto
 a fixed-neighbourhood aggregation of pre-logit decoder features, since
 CloSe-Net has no upsampling stage of its own; adapt SegFix to the point cloud
 setting; and initialise the garment codebook from CLIP~\cite{radford2021clip}
-text embeddings of the class names. We evaluate every combination on CloSe-D
+text embeddings of the class names. We evaluate every combination on CloSe-Di
 augmented with THuman2.0 across three seeds, using boundary- and region-level
 metrics~\cite{tang2022contrastive,biou}, and report only effects that exceed
 seed variance. Our contributions are:
@@ -234,7 +228,7 @@ seed variance. Our contributions are:
   \item A CLIP-initialised garment codebook, a semantic-prior alternative to
         the geometric boundary mechanisms above, evaluated both independently
         and in combination with them.
-  \item A THuman2.0-derived augmentation of the CloSe-D training split.
+  \item A THuman2.0-derived augmentation of the CloSe-Di training split.
   \item A multi-seed ablation over all component combinations, under both a
         randomly initialised and a CLIP-initialised codebook.
   \item An analysis of when these strategies transfer to 3D clothing
@@ -266,7 +260,7 @@ supervision that guides an existing feature-propagation step, CBL reshapes the
 feature space directly with a contrastive objective at every backbone stage,
 and SegFix relabels low-confidence predictions at test time without touching
 training at all. All three were developed and validated on generic indoor and
-outdoor scene benchmarks such as S3DIS~\cite{https://doi.org/10.57761/gk3g-wc33}
+outdoor scene benchmarks such as S3DIS~\cite{armeni20163d}
 and ScanNet~\cite{dai2017scannet}, not on clothed human scans, and (with the
 exception of CBL, whose ablation already probes a limited-hierarchy setting)
 not on backbones lacking a sub-sampling hierarchy -- the gap this paper's
@@ -324,7 +318,8 @@ ground-truth vectors, added to the segmentation loss as
   \mathcal{L} = \mathcal{L}_{\text{segm}} + \lambda_B \mathcal{L}_{\text{boundary}} + \lambda_D \mathcal{L}_{\text{direction}},
   \label{eq:ptb-loss}
 \end{equation}
-with $\lambda_B{=}3.0$, $\lambda_D{=}0.3$. Ground-truth boundary membership
+with $\lambda_B{=}3.0$, $\lambda_D{=}0.3$ (Du et al.'s own reported values, used
+unchanged). Ground-truth boundary membership
 and direction are precomputed once per scan, at full mesh resolution (before
 the 2048-point training subsample, so the boundary set does not depend on
 which points happen to be sampled): a point is a boundary point if any of its
@@ -353,7 +348,7 @@ boundary probability (from \cref{sec:methodology:ptb}), and $\theta_{ij}$ is
 the angle between the neighbour offset and point $i$'s predicted interior
 direction. $r$ is a per-module scale, initialised at $0.05$ and left
 \emph{learnable} rather than fixed at PTB's original room-scale value
-($r{=}0.125$, tuned for metre-scale S3DIS rooms rather than unit-bounding-box
+($r{=}0.125$, set for metre-scale S3DIS rooms rather than unit-bounding-box
 human scans), and $\alpha{=}1.0$. Interior points ($\hat P_{b,i}\approx0$)
 degrade gracefully to plain distance-weighted smoothing. The aggregated
 neighbourhood feature is passed through a small residual block (a
@@ -428,16 +423,19 @@ starting point the codebook is optimised from, not the optimisation itself.
 \label{sec:methodology:thuman}
 
 To increase training data volume, particularly for the boundary-supervised
-variants above, we augment CloSe-D with THuman2.0~\cite{tao2021function4d}
-scans converted into CloSe-D's own per-scan format. This required obtaining
+variants above, we augment CloSe-Di with THuman2.0~\cite{tao2021function4d}
+scans converted into CloSe-Di's own per-scan format. We use CloSe-Di
+specifically throughout this paper -- the 1{,}455-scan subset of CloSe-D with
+full SMPL registrations, as distinct from the licensing-restricted CloSe-Dc
+subset or the CloSe-D++ subset of external datasets. This required obtaining
 THuman2.0's raw scans, its released SMPL (not SMPL-X) body fits, and the SMPL
 neutral body model itself, and running the same preprocessing pipeline
-CloSe-D's own scans go through (canonical-pose computation, colour and normal
+CloSe-Di's own scans go through (canonical-pose computation, colour and normal
 extraction) on each THuman2.0 scan. Of THuman2.0's 526 scans, 500 have
-usable garment labels; we combine these with CloSe-D's original split into a
+usable garment labels; we combine these with CloSe-Di's original split into a
 single fixed-seed 80/10/10 train/val/test split, used for every ablation in
 this paper. This step is purely infrastructural and makes no methodological
-claim of its own. We did not separately evaluate a CloSe-D-only baseline, so
+claim of its own. We did not separately evaluate a CloSe-Di-only baseline, so
 this report cannot isolate whether the THuman2.0 augmentation itself helped
 or hurt any aggregate metric -- every number in this paper already includes
 it.
@@ -564,40 +562,25 @@ delta of each CLIP-campaign row vs.\ its non-CLIP counterpart.}
 \label{tab:headline}
 \end{table*}
 
-The headline finding is negative, and we lead with it rather than bury it:
+The primary finding is negative:
 \textbf{no configuration in \cref{tab:headline} detectably improves aggregate
 B-IoU over its own baseline, in either regime.} In the non-CLIP campaign, the
 plain baseline's B-IoU ($78.37\pm0.42$) is the best value in the entire
 column -- every added component, and every combination of them, sits at or
 below it, down to $76.90\pm0.33$ for PTB+BRM+SegFix. In the CLIP campaign the
 best column value (+PTB, $78.29\pm0.38$) is only $0.82$pp above the CLIP
-baseline ($77.47\pm0.73$), well within the two rows' own standard deviations.
+baseline ($77.47\pm0.73$) -- a raw mean-vs-own-std comparison of two unpaired
+rows, looser than the paired $2\sigma$ test used for \cref{tab:headline}'s
+$\Delta$B-IoU column and applied throughout \cref{sec:clip-results}.
 If B-IoU is the metric these methods were built to move, on this evidence
-none of them move it. This is precisely why \cref{sec:per-class} exists: not
-as an afterthought to a positive aggregate result, but as the reason to keep
-looking once the aggregate result turns up empty.
+none of them move it. \cref{sec:per-class} examines per-class performance to investigate whether patterns emerge that the aggregate result may obscure.
 
-A second pattern qualifies, without reversing, the first. mIoU@inner rises
-monotonically as PTB and then BRM are added, in both regimes:
-$98.80\pm0.18 \to 98.91\pm0.13 \to 99.05\pm0.14$ from baseline to +PTB to
-+PTB+BRM in the non-CLIP campaign, and $98.83\pm0.24 \to 98.99\pm0.09 \to
-99.04\pm0.03$ over the same chain under CLIP init. This is not a
-boundary-for-interior trade-off -- mIoU@boundary over the identical non-CLIP
-chain is flat-to-noisy ($90.16 \to 89.98 \to 90.17$), not falling -- so the
-honest description is that boundary supervision \emph{gains interior
-accuracy while holding boundary accuracy}, a gain the aggregate B-IoU metric
-above is simply not built to see.
+A second pattern refines the first. mIoU@inner rises monotonically as PTB and then BRM are added, in both regimes: $98.80\pm0.18 \to 98.91\pm0.13 \to 99.05\pm0.14$ from baseline to +PTB to +PTB+BRM in the non-CLIP campaign, and $98.83\pm0.24 \to 98.99\pm0.09 \to 99.04\pm0.03$ over the same chain under CLIP init. Over the identical non-CLIP chain, mIoU@boundary remains stable ($90.16 \to 89.98 \to 90.17$), indicating no boundary-for-interior trade-off. Boundary supervision therefore improves interior accuracy while preserving boundary accuracy, an effect the aggregate B-IoU metric does not capture.
 
 \subsection{Boundary vs.\ Interior Trade-off}
 \label{sec:results:tradeoff}
 
-\Cref{fig:tradeoff} makes the previous paragraph's claim visible directly:
-mean $\Delta$mIoU@inner vs.\ mean $\Delta$mIoU@boundary, each non-baseline
-config against its own campaign's baseline. Points cluster near zero on the
-horizontal axis (mIoU@boundary barely moves either way) while sitting mostly
-above it on the vertical axis (mIoU@inner mostly rises) -- gain-without-loss,
-not a diagonal trade-off, for the large majority of configurations in both
-campaigns.
+\Cref{fig:tradeoff} visualizes this relationship: mean $\Delta$mIoU@inner versus mean $\Delta$mIoU@boundary, with each non-baseline configuration measured against its own campaign's baseline. Points cluster near zero along the horizontal axis (mIoU@boundary changes little in either direction) and lie predominantly above zero on the vertical axis (mIoU@inner generally increases). For the majority of configurations in both campaigns, this indicates a gain in interior accuracy without a corresponding loss at boundaries, rather than a diagonal trade-off.
 
 \begin{figure}[h]
 \centering
@@ -610,18 +593,7 @@ config vs.\ its own campaign's baseline (raw means, both campaigns).}
 \subsection{SegFix Post-Processing}
 \label{sec:results:segfix}
 
-SegFix is the only mechanism in this report applied purely at test time, so
-we check it the same way as everything else: paired by timestamp (the exact
-same trained checkpoint, scored with and without post-processing), against
-the same $2\sigma$ threshold. \Cref{tab:segfix} shows the result -- none of
-the 4 PTB-family configs clear it, in either campaign. The largest movement,
-non-CLIP PTB+BRM at $-0.38\pm0.22$ ($2\sigma=0.44$), is suggestive but not
-detectable: numerically the biggest drop in the table, one seed's worth of
-noise short of clearing the bar. We do not treat this as a proven regression,
-but it is consistent with SegFix's threshold and step size being tuned for
-metre-scale S3DIS rooms rather than the unit-bounding-box scale CloSe-Di/THuman2.0
-scans are normalised to -- the same scale mismatch \cref{sec:methodology:brm}
-already had to rescale BRM's learnable $r$ around.
+SegFix is the only mechanism in this report applied purely at test time, so it is evaluated identically to the other components: paired by timestamp (the same trained checkpoint scored with and without post-processing), against the same $2\sigma$ threshold. \Cref{tab:segfix} shows that none of the 4 PTB-family configurations clear this threshold in either campaign. The largest observed movement, non-CLIP PTB+BRM at $-0.38\pm0.22$ ($2\sigma=0.44$), is the biggest drop in the table but clears a $1\sigma$ threshold without clearing the $2\sigma$ one, falling short of the detectability bar by about $0.06$pp. This observation does not establish a regression, but is consistent with SegFix's threshold and step size having been tuned for metre-scale S3DIS rooms rather than the unit-bounding-box scale to which CloSe-Di/THuman2.0 scans are normalised -- the same scale mismatch that \cref{sec:methodology:brm} already addressed by rescaling BRM's learnable $r$.
 
 \begin{table}[h]
 \centering
@@ -634,11 +606,7 @@ campaigns. No cell clears $2\sigma$; bold would mark one if present.}
 \subsection{Training Dynamics}
 \label{sec:results:training}
 
-\Cref{fig:training-dynamics} shows val loss and val B-IoU over training for
-the non-CLIP 4-config ladder, mean $\pm$ seed-std ribbon; all four plateau
-well before the 50-epoch budget ends. \Cref{tab:best-epoch} makes this
-concrete: mean best-checkpoint epoch is 37--43 of 50 for all four configs, none
-flagged as a late-training selection.
+\Cref{fig:training-dynamics} shows validation loss and validation B-IoU over training for the non-CLIP 4-configuration ladder, with mean $\pm$ seed-std ribbons; all four curves plateau well before the 50-epoch budget ends. \Cref{tab:best-epoch} quantifies this: the mean best-checkpoint epoch falls between 37 and 43 out of 50 for all four configurations, and none are flagged as late-training selections.
 
 \begin{figure}[h]
 \centering
@@ -655,15 +623,10 @@ $\pm$ seed std.}
 \label{tab:best-epoch}
 \end{table}
 
-\section{Where CLIP Helps and Hurts}
+\section{Effects of CLIP Initialization}
 \label{sec:clip-results}
 
-\Cref{tab:headline}'s $\Delta$ B-IoU column already shows one detectable
-paired effect (CLIP baseline vs.\ non-CLIP baseline) and nine null ones. This
-section checks every other metric the same way -- same paired seeds, same
-$2\sigma$ threshold (\cref{sec:setup}) -- rather than reading claims off raw
-best-per-column cells, which can compare different configs across the two
-campaign blocks and were never paired-tested.
+\Cref{tab:headline}'s $\Delta$ B-IoU column shows one detectable paired effect (CLIP baseline vs.\ non-CLIP baseline) and nine null ones. This section applies the same test to the remaining metrics -- same paired seeds, same $2\sigma$ threshold (\cref{sec:setup}) -- instead of reading conclusions from raw best-per-column cells, which can compare different configurations across the two campaign blocks and were never paired-tested.
 
 \begin{table*}[t]
 \centering
@@ -674,36 +637,16 @@ noise at $n{=}3$ seeds.}
 \label{tab:clip-paired}
 \end{table*}
 
-Of the 60 cells in \cref{tab:clip-paired}, exactly three are detectable.
-CLIP-init on the plain baseline detectably \emph{hurts} two metrics, not one:
-B-IoU ($-0.90\pm0.37$) and freq\_IoU ($-0.18\pm0.03$). Every one of the nine
-non-baseline configurations neutralises both -- no config shows a detectable
-B-IoU or freq\_IoU difference between its CLIP and non-CLIP version. The
-third detectable cell is the only positive finding: CLIP+PTB reaches a
-detectably lower segm\_loss than non-CLIP+PTB ($-0.0038\pm0.0014$), with no
-accompanying detectable change on mIoU, mIoU@boundary, or mIoU@inner for that
-same row -- a training-signal effect, not an evaluation-metric one, and we
-report it as such rather than as ``CLIP+PTB wins.''
+Of the 60 cells in \cref{tab:clip-paired}, three are detectable. On the plain baseline, CLIP-init is associated with a decrease in two metrics: B-IoU ($-0.90\pm0.37$) and freq\_IoU ($-0.18\pm0.03$). Across the nine non-baseline configurations, no detectable B-IoU or freq\_IoU difference is observed between the CLIP and non-CLIP versions. The third detectable cell is a decrease in segm\_loss for CLIP+PTB relative to non-CLIP+PTB ($-0.0038\pm0.0014$), with no accompanying detectable change in mIoU, mIoU@boundary, or mIoU@inner in that row; this is a training-signal effect rather than an evaluation-metric one.
 
-Read together: CLIP reshapes the codebook's class-level semantics, PTB/BRM
-reshape boundary geometry through direct supervision, and on this evidence
-the two barely interact -- our methods erase CLIP-init's initial damage, but
-neither side measurably lifts the other beyond that one loss-level effect.
+Taken together, these results suggest that CLIP initialization affects class-level semantics in the codebook while PTB/BRM affect boundary geometry through direct supervision, and that on this evidence the two contributions show limited interaction: the non-baseline configurations offset the baseline-level differences associated with CLIP-init, but no measurable additive effect is observed beyond the single loss-level difference noted above.
 
-\section{Where the Signal Lives: Per-Class}
+\section{Per-Class Analysis}
 \label{sec:per-class}
 
-Aggregate metrics average over 18 classes of very unequal difficulty; this
-section reopens that average, non-CLIP (left) and CLIP-init (right)
-throughout, and is the direct explanation for \cref{sec:results}'s null
-result, not a contradiction of it.
+Aggregate metrics average over 18 classes of unequal difficulty; this section decomposes that average, with non-CLIP results on the left and CLIP-init results on the right throughout. The per-class view provides the mechanism underlying \cref{sec:results}'s null result rather than contradicting it.
 
-\Cref{fig:per-class-heatmap} first establishes that difficulty is a property
-of the class, not the config: Dress, Jumpsuits, and Scarf are the three
-hardest classes under every one of the four configs, in both campaigns --
-adding CBL, PTB, or BRM changes individual cells by a point or two, but never
-changes which classes are hard. Nothing in this campaign closes that gap; it
-only asks whether the added components move the needle within it.
+\Cref{fig:per-class-heatmap} first establishes that difficulty is a property of the class rather than the configuration: Dress, Jumpsuits, and Scarf are the three hardest classes under all four configurations in both campaigns. Adding CBL, PTB, or BRM shifts individual cells by one to two points but does not change which classes are hardest. None of the configurations close this gap. The analysis instead examines whether the added components produce measurable changes within it.
 
 \begin{figure*}[t]
 \centering
@@ -732,17 +675,7 @@ moves less ($+0.005$) and Scarf is unchanged.}
 \label{fig:per-class-delta}
 \end{figure*}
 
-Two things stand out. First, the classes that move most under PTB+BRM+CBL
-(non-CLIP) are exactly two of the three classes we already knew were
-hardest -- Dress and Jumpsuits -- which is consistent with a real boundary
-effect concentrating where boundaries are actually ambiguous, rather than a
-diffuse improvement spread evenly across all 18 classes. Second, Scarf
-breaks that pattern: it is the third tail class by baseline difficulty but
-moves slightly \emph{negative}, and this is also where the CLIP campaign
-diverges most -- CLIP's largest mover is Coat, a class that was not
-particularly hard to begin with. The geometric route (PTB+BRM+CBL) and the
-semantic route (CLIP-init) are evidently picking up different signal, not
-the same signal through two mechanisms.
+Two observations emerge. First, the classes with the largest changes under PTB+BRM+CBL (non-CLIP) are Dress and Jumpsuits, two of the three hardest classes identified above. This pattern is consistent with a boundary effect concentrated in classes where boundaries are ambiguous, rather than a uniform improvement distributed across all 18 classes. Second, Scarf departs from this pattern: although it ranks third in baseline difficulty, its change is slightly negative. The CLIP campaign also diverges here -- the class with the largest change under CLIP is Coat, which is not among the harder classes at baseline. These results indicate that the geometric route (PTB+BRM+CBL) and the semantic route (CLIP-init) affect different subsets of classes rather than the same classes through different mechanisms.
 
 \begin{figure*}[t]
 \centering
@@ -757,15 +690,7 @@ mean-only bars.}
 \label{fig:tail-closeup}
 \end{figure*}
 
-The mean bars in \cref{fig:per-class-delta} hide exactly the distinction that
-matters here. Dress's gain holds up at the seed level: 2 of 3 seeds move up,
-consistent with a real, if not universal, effect. Jumpsuits' mean gain is
-not: its three seeds disagree on \emph{direction}, so the positive mean is an
-artefact of averaging, not a signal any individual training run actually
-shows. Scarf barely moves at either level of aggregation. Of the three
-classes we picked out as the largest movers, only one (Dress) survives
-looking at individual seeds rather than their mean -- which is precisely the
-honesty this figure is for.
+The mean bars in \cref{fig:per-class-delta} conceal a distinction visible only at the seed level. Dress's gain is consistent across seeds: 2 of 3 seeds show an increase, indicating a partial but non-uniform effect. Jumpsuits' mean gain is not: the three seeds disagree in direction, so the positive mean reflects averaging rather than a consistent effect within individual runs. Scarf shows little change at either level of aggregation. Of the three classes identified as the largest movers by mean, only Dress retains a directionally consistent effect when examined at the seed level.
 
 \begin{figure*}[t]
 \centering
@@ -779,114 +704,27 @@ of both the remaining headroom and the seed noise.}
 \label{fig:variance-scatter}
 \end{figure*}
 
-\Cref{fig:variance-scatter} is the ceiling story that anchors this whole
-section. Ten of the eighteen classes already sit at $\geq 0.96$ baseline
-IoU, in a tight cluster at the bottom-right of the plot: little headroom left
-to gain, and correspondingly little seed-to-seed variance to fight through.
-Almost all of the room any method has to show an effect -- and almost all of
-the seed noise standing in the way of detecting one -- is concentrated in a
-handful of classes at the other end (Dress, Jumpsuits, Scarf, Body, Hair,
-Shoes). This is why \cref{sec:results}'s aggregate B-IoU stays flat: it
-averages 18 classes, ten of which have almost nothing left to move, diluting
-whatever the tail classes do into noise. It is also why \cref{fig:tail-closeup}'s
-seed-level disagreement on Jumpsuits is not a fluke -- the tail classes carry
-the most real signal and the most real noise simultaneously, by construction.
+\Cref{fig:variance-scatter} contextualizes the section's findings. Ten of the eighteen classes have baseline IoU $\geq 0.96$, forming a tight cluster in the bottom-right of the plot with limited headroom and correspondingly low seed-to-seed variance. The remaining headroom and the majority of seed noise are concentrated in a small subset of classes (Dress, Jumpsuits, Scarf, Body, Hair, Shoes). This distribution accounts for the flat aggregate B-IoU reported in \cref{sec:results}: averaging over 18 classes, ten of which have little room to change, dilutes the effects observed in the tail classes. It also accounts for the seed-level disagreement on Jumpsuits shown in \cref{fig:tail-closeup}, as the tail classes contribute both the largest potential signal and the largest variance.
 
 \section{Discussion}
 \label{sec:discussion}
+The three results sections describe a single consistent pattern. \Cref{sec:results} shows that no configuration produces a detectable improvement in aggregate B-IoU over baseline under either codebook-initialization regime. \Cref{sec:per-class} indicates a plausible explanation: ten of eighteen classes exceed 0.96 baseline IoU, leaving limited headroom and low seed variance, so any per-class effect is diluted when averaged across mostly-saturated classes. At the per-class level, Dress increases under PTB+BRM+CBL in 2 of 3 seeds, indicating a partial effect; Jumpsuits' positive mean reflects seeds disagreeing in direction rather than a consistent gain; and Scarf shows minimal change. \Cref{sec:results:tradeoff} additionally observes that where boundary supervision produces an effect, it appears as an increase in interior accuracy while boundary accuracy is preserved, rather than as a trade-off between the two.
 
-Put together, the three results sections tell one consistent story rather
-than three separate ones. \Cref{sec:results} found that no configuration
-detectably improves aggregate B-IoU over baseline, in either codebook-init
-regime. \Cref{sec:per-class} explains why: ten of eighteen classes are
-already at or above 0.96 baseline IoU, with essentially no headroom and no
-seed variance left, so any real per-class effect is diluted across mostly-
-saturated classes the moment it is averaged into a single number. The effect
-is there -- Dress moves up under PTB+BRM+CBL in 2 of 3 seeds, a real if not
-universal gain -- but Jumpsuits' apparent gain turns out to be two seeds
-disagreeing on direction averaging to a positive mean, and Scarf barely
-moves at all. \Cref{sec:results:tradeoff} adds that where boundary
-supervision does show an effect, it shows up as \emph{gained} interior
-accuracy with boundary accuracy held rather than traded away -- not the
-failure mode we went in expecting, but not the boundary win the methods were
-built to produce either.
+\Cref{sec:clip-results}'s findings compose with this pattern. CLIP-init produces a detectable decrease on the plain baseline for two metrics (B-IoU and freq\_IoU), and each of the nine non-baseline configurations offsets these differences without producing additional detectable gains. The only positive detectable trace of CLIP across the 60-run campaign is a lower training loss under PTB, with no corresponding detectable change in accuracy metrics. On this evidence, the geometric route (PTB/BRM/CBL) and the semantic route (CLIP-init) each produce measurable effects, but the two do not combine into an additive gain. \Cref{sec:per-class}'s observation that CLIP's largest per-class change (Coat) differs from PTB+BRM+CBL's (Dress, Jumpsuits) is consistent with the two mechanisms affecting different subsets of classes. \Cref{sec:results:segfix}'s SegFix result fits the same pattern: a non-detectable decrease that is consistent with a hyperparameter-scale mismatch rather than a mechanism failure.
 
-\Cref{sec:clip-results}'s finding composes with this rather than
-complicating it. CLIP-init detectably damages the plain baseline on two
-metrics (B-IoU and freq\_IoU), and every one of our nine other configurations
-neutralises both -- but only neutralises them. The one place CLIP leaves a
-positive, detectable trace anywhere in the 60-run campaign is a lower
-training loss under PTB specifically, with no accompanying detectable
-accuracy gain. Read plainly: the geometric route (PTB/BRM/CBL) and the
-semantic route (CLIP-init) each do something real, but on this evidence they
-do not add up to more than either does alone, and \cref{sec:per-class}'s
-finding that CLIP's largest per-class mover (Coat) is not even the same
-class as PTB+BRM+CBL's (Dress, Jumpsuits) suggests they are not picking up
-the same signal in the first place. \Cref{sec:results:segfix}'s SegFix
-finding fits the same pattern: a suggestive but non-detectable drop,
-plausibly a hyperparameter-scale artefact rather than a mechanism failure.
-
-\textbf{Limitations.} We name four explicitly, all with the evidence behind
-them already in this report rather than asserted after the fact.
+\textbf{Limitations.} We identify three limitations of this study, each supported by the evidence presented above, and note directions in which further work could address them.
 \begin{itemize}
-  \item \emph{$n=3$ is the binding constraint on almost every null result in
-        this paper.} Tail-class seed spread is roughly $1.5$--$2.2$pp on
-        Dress and Jumpsuits (\cref{fig:tail-closeup}) -- large enough that a
-        real effect of that size cannot clear our $2\sigma$ threshold at
-        this seed count, which is exactly the situation Jumpsuits appears to
-        be in. More seeds, not a different method, is the direct way to
-        resolve this.
-  \item \emph{Single test set.} Every number in this report is on
-        CloSe-D augmented with THuman2.0 (\cref{sec:methodology:thuman}); we
-        did not evaluate on GarmentCode or any other out-of-distribution set
-        as originally scoped, and did not separately evaluate a
-        THuman2.0-free baseline, so we cannot isolate the augmentation's own
-        effect from the methods it was meant to support.
-  \item \emph{SegFix's hyperparameters were not tuned for this domain.} Its
-        threshold and step size are inherited defaults, not swept for
-        unit-bounding-box point clouds, and \cref{sec:results:segfix}'s
-        suggestive drop is consistent with (though not proof of) that
-        mismatch.
-  \item \emph{The qualitative comparison is deferred, not abandoned.} A
-        per-point, colour-coded baseline-vs-PTB+BRM+CBL comparison on real
-        scans needs the trained checkpoints, which live on the training
-        cluster rather than in this local environment; we plan to add it
-        once that access is available.
+  \item \emph{Seed count.} With $n=3$, tail-class seed spread reaches approximately $1.5$--$2.2$pp on Dress and Jumpsuits (\cref{fig:tail-closeup}), so effects of that magnitude cannot clear the $2\sigma$ threshold at this seed count. This applies to the null result observed on Jumpsuits. Increasing the seed count would provide a direct means of resolving whether such effects are detectable.
+  \item \emph{Single evaluation set.} All results are reported on CloSe-Di augmented with THuman2.0 (\cref{sec:methodology:thuman}); this augmentation is purely infrastructural and makes no methodological claim of its own. Evaluation on GarmentCode or other out-of-distribution sets was not performed, and we did not separately evaluate a CloSe-Di-only baseline, so the contribution of the augmentation cannot be isolated from the methods it supports. Future work on additional evaluation sets would clarify this distinction.
+  \item \emph{SegFix hyperparameters.} The threshold and step size used are inherited defaults and were not tuned for unit-bounding-box point clouds. The non-detectable decrease reported in \cref{sec:results:segfix} is consistent with this scale mismatch, though it does not establish it. A hyperparameter sweep in this domain would provide a more definitive test.
 \end{itemize}
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We integrated PTB-style auxiliary supervision, a re-homed refinement module
-(BRM), point-cloud SegFix, contrastive boundary learning, and a
-CLIP-initialised codebook into CloSe-Net, and evaluated all ten combinations
-under both a random and a CLIP-initialised codebook, three seeds each. The
-headline result is negative and we report it as such: none of these methods
-detectably improves aggregate B-IoU over the plain baseline, in either
-regime. That result does not mean nothing happened. Per-class analysis
-shows a real, seed-consistent gain on at least one hard class (Dress) that
-the aggregate metric cannot see because ten of eighteen classes are already
-saturated; the boundary-vs-interior scatter shows the methods gain interior
-accuracy without losing boundary accuracy; and the CLIP campaign shows a
-specific, detectable, and previously unquantified interaction -- CLIP-init
-damages the plain baseline, our methods neutralise that damage, and the
-methods and CLIP-init otherwise leave each other alone. The overall
-picture is a method that moves real but narrow, class-concentrated signal
-that a single aggregate number is not built to expose -- and a set of tools
-(paired seed-matched testing, per-class breakdowns, honest per-seed plots)
-for finding that signal rather than either missing it or overclaiming it.
+This work integrated PTB-style auxiliary supervision, a re-homed refinement module (BRM), point-cloud SegFix, contrastive boundary learning, and a CLIP-initialised codebook into CloSe-Net, and evaluated all ten combinations under both random and CLIP-initialised codebooks, with three seeds per configuration under each codebook regime (\cref{sec:setup}). The primary result is that none of these methods produced a detectable improvement in aggregate B-IoU over the plain baseline in either regime. Additional analyses provide further context for this result. Per-class analysis identified a seed-consistent gain on at least one hard class (Dress) that is not visible in the aggregate metric, as ten of eighteen classes are near saturation. The boundary-versus-interior comparison indicated that the methods increase interior accuracy while preserving boundary accuracy. The CLIP campaign showed a specific detectable interaction: CLIP-initialization is associated with a decrease on the plain baseline, the methods offset that difference, and no additional detectable interaction between the methods and CLIP-initialization was observed. Taken together, the results suggest that the evaluated methods produce narrow, class-concentrated effects that a single aggregate metric does not readily surface, and the analysis tools applied here (paired seed-matched testing, per-class breakdowns, per-seed plots) are intended to support the identification of such effects.
 
-Future work follows directly from the limitations above: a properly-seeded
-CBL feature-stage ablation (decoder vs.\ encoder-stage vs.\ multi-scale,
-\cref{sec:methodology:cbl}); a point-cloud-scale hyperparameter sweep for
-SegFix; the deferred qualitative visualisation once training-cluster
-checkpoint access is available; and evaluation on an out-of-distribution set
-such as GarmentCode, which was in the original scope of this project and
-would test whether the per-class pattern found here (real signal on hard,
-boundary-heavy classes; little movement on easy ones) generalises beyond
-CloSe-D and THuman2.0.
-
-\section*{Acknowledgements}
+Future work follows from the limitations noted above. A seed-adequate CBL feature-stage ablation (decoder versus encoder-stage versus multi-scale, \cref{sec:methodology:cbl}) would clarify the contribution of that component. A point-cloud-scale hyperparameter sweep for SegFix would test whether the observed non-detectable decrease reflects the scale mismatch discussed above. Evaluation on an out-of-distribution set such as GarmentCode, part of the original scope of this project, would test whether the per-class pattern observed here (effects concentrated on hard, boundary-heavy classes with limited movement on easier ones) generalises beyond CloSe-Di and THuman2.0.
 
 \section*{Impact Statement}
 
